@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Coordinates = {
   latitude: number;
@@ -20,7 +20,10 @@ export default function ReportPage() {
   const recordedChunksRef = useRef<Blob[]>([]);
 
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraStream, setCameraStream] =
+    useState<MediaStream | null>(null);
   const [recording, setRecording] = useState(false);
+
   const [photo, setPhoto] = useState<string | null>(null);
   const [videoFile, setVideoFile] = useState<Blob | null>(null);
 
@@ -33,7 +36,8 @@ export default function ReportPage() {
   const [location, setLocation] = useState("");
   const [coordinates, setCoordinates] =
     useState<Coordinates | null>(null);
-  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationLoading, setLocationLoading] =
+    useState(false);
 
   const [error, setError] = useState("");
 
@@ -44,6 +48,37 @@ export default function ReportPage() {
     useState("");
 
   const [success, setSuccess] = useState("");
+
+  // -----------------------------
+  // ATTACH CAMERA STREAM TO VIDEO
+  // -----------------------------
+  useEffect(() => {
+    if (
+      !cameraOpen ||
+      !cameraStream ||
+      !videoRef.current
+    ) {
+      return;
+    }
+
+    const video = videoRef.current;
+
+    video.srcObject = cameraStream;
+
+    const startVideo = async () => {
+      try {
+        await video.play();
+      } catch (error) {
+        console.error("Video play error:", error);
+      }
+    };
+
+    startVideo();
+
+    return () => {
+      video.srcObject = null;
+    };
+  }, [cameraOpen, cameraStream]);
 
   // -----------------------------
   // GET CURRENT GPS LOCATION
@@ -127,6 +162,16 @@ export default function ReportPage() {
       setError("");
       setSuccess("");
 
+      if (
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+      ) {
+        setError(
+          "Camera access is not supported by this browser."
+        );
+        return;
+      }
+
       const stream =
         await navigator.mediaDevices.getUserMedia({
           video: {
@@ -137,11 +182,7 @@ export default function ReportPage() {
           audio: true,
         });
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
+      setCameraStream(stream);
       setCameraOpen(true);
     } catch (err) {
       console.error("Camera Error:", err);
@@ -156,17 +197,13 @@ export default function ReportPage() {
   // CLOSE CAMERA
   // -----------------------------
   const closeCamera = () => {
-    const stream =
-      videoRef.current?.srcObject as MediaStream | null;
-
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
+    if (cameraStream) {
+      cameraStream
+        .getTracks()
+        .forEach((track) => track.stop());
     }
 
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
+    setCameraStream(null);
     setCameraOpen(false);
     setRecording(false);
   };
@@ -184,11 +221,12 @@ export default function ReportPage() {
     }
 
     if (
+      video.readyState < 2 ||
       video.videoWidth === 0 ||
       video.videoHeight === 0
     ) {
       setError(
-        "Camera is still starting. Please wait a moment."
+        "Camera is still starting. Please wait 1–2 seconds and try again."
       );
       return;
     }
@@ -218,7 +256,6 @@ export default function ReportPage() {
 
     setPhoto(imageData);
 
-    // Reset previous verification
     setVerificationStatus("idle");
     setVerificationMessage("");
 
@@ -231,11 +268,12 @@ export default function ReportPage() {
   // START VIDEO RECORDING
   // -----------------------------
   const startRecording = () => {
-    const stream =
-      videoRef.current?.srcObject as MediaStream | null;
+    const stream = cameraStream;
 
     if (!stream) {
-      setError("Please open the camera first.");
+      setError(
+        "Please open the camera first."
+      );
       return;
     }
 
@@ -514,7 +552,6 @@ export default function ReportPage() {
                   className="max-h-96 w-full rounded-xl object-contain"
                 />
 
-                {/* VERIFY BUTTON */}
                 <button
                   type="button"
                   onClick={verifyEvidence}
@@ -530,7 +567,6 @@ export default function ReportPage() {
                     : "🤖 Verify Pothole Evidence"}
                 </button>
 
-                {/* VERIFICATION RESULT */}
                 {verificationStatus !==
                   "idle" && (
                   <div
@@ -569,6 +605,7 @@ export default function ReportPage() {
                           <p className="text-xs text-slate-400">
                             Evidence
                           </p>
+
                           <p className="mt-1 font-semibold text-green-300">
                             Verified
                           </p>
@@ -578,6 +615,7 @@ export default function ReportPage() {
                           <p className="text-xs text-slate-400">
                             Confidence
                           </p>
+
                           <p className="mt-1 font-semibold text-green-300">
                             High
                           </p>
@@ -587,6 +625,7 @@ export default function ReportPage() {
                           <p className="text-xs text-slate-400">
                             Status
                           </p>
+
                           <p className="mt-1 font-semibold text-blue-300">
                             Ready
                           </p>
@@ -598,7 +637,6 @@ export default function ReportPage() {
               </div>
             )}
 
-            {/* VIDEO STATUS */}
             {videoFile && (
               <div className="mt-6 rounded-xl border border-green-500/20 bg-green-500/5 p-4 text-green-300">
                 🎥 Video evidence is ready.
