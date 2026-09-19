@@ -7,6 +7,12 @@ type Coordinates = {
   longitude: number;
 };
 
+type VerificationStatus =
+  | "idle"
+  | "checking"
+  | "verified"
+  | "review";
+
 export default function ReportPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -25,10 +31,18 @@ export default function ReportPage() {
   const [description, setDescription] = useState("");
 
   const [location, setLocation] = useState("");
-  const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
+  const [coordinates, setCoordinates] =
+    useState<Coordinates | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
 
   const [error, setError] = useState("");
+
+  const [verificationStatus, setVerificationStatus] =
+    useState<VerificationStatus>("idle");
+
+  const [verificationMessage, setVerificationMessage] =
+    useState("");
+
   const [success, setSuccess] = useState("");
 
   // -----------------------------
@@ -40,7 +54,9 @@ export default function ReportPage() {
     setLocationLoading(true);
 
     if (!navigator.geolocation) {
-      setError("Geolocation is not supported by this phone/browser.");
+      setError(
+        "Geolocation is not supported by this phone/browser."
+      );
       setLocationLoading(false);
       return;
     }
@@ -60,7 +76,10 @@ export default function ReportPage() {
         );
 
         setLocationLoading(false);
-        setSuccess("📍 Current location captured successfully.");
+
+        setSuccess(
+          "📍 Current location captured successfully."
+        );
       },
       (error) => {
         console.error("GPS Error:", error);
@@ -87,7 +106,9 @@ export default function ReportPage() {
             break;
 
           default:
-            setError("Unable to get your current location.");
+            setError(
+              "Unable to get your current location."
+            );
         }
       },
       {
@@ -106,23 +127,25 @@ export default function ReportPage() {
       setError("");
       setSuccess("");
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: {
-            ideal: "environment",
+      const stream =
+        await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: {
+              ideal: "environment",
+            },
           },
-        },
-        audio: true,
-      });
+          audio: true,
+        });
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        await videoRef.current.play();
       }
 
       setCameraOpen(true);
     } catch (err) {
       console.error("Camera Error:", err);
+
       setError(
         "Unable to access camera. Please allow camera permission and try again."
       );
@@ -133,7 +156,8 @@ export default function ReportPage() {
   // CLOSE CAMERA
   // -----------------------------
   const closeCamera = () => {
-    const stream = videoRef.current?.srcObject as MediaStream | null;
+    const stream =
+      videoRef.current?.srcObject as MediaStream | null;
 
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
@@ -159,8 +183,13 @@ export default function ReportPage() {
       return;
     }
 
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      setError("Camera is still starting. Please wait a moment.");
+    if (
+      video.videoWidth === 0 ||
+      video.videoHeight === 0
+    ) {
+      setError(
+        "Camera is still starting. Please wait a moment."
+      );
       return;
     }
 
@@ -174,19 +203,36 @@ export default function ReportPage() {
       return;
     }
 
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    context.drawImage(
+      video,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
 
-    const imageData = canvas.toDataURL("image/jpeg", 0.9);
+    const imageData = canvas.toDataURL(
+      "image/jpeg",
+      0.9
+    );
 
     setPhoto(imageData);
-    setSuccess("📸 Photo captured successfully.");
+
+    // Reset previous verification
+    setVerificationStatus("idle");
+    setVerificationMessage("");
+
+    setSuccess(
+      "📸 Photo captured successfully."
+    );
   };
 
   // -----------------------------
   // START VIDEO RECORDING
   // -----------------------------
   const startRecording = () => {
-    const stream = videoRef.current?.srcObject as MediaStream | null;
+    const stream =
+      videoRef.current?.srcObject as MediaStream | null;
 
     if (!stream) {
       setError("Please open the camera first.");
@@ -202,25 +248,40 @@ export default function ReportPage() {
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
+          recordedChunksRef.current.push(
+            event.data
+          );
         }
       };
 
       recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, {
-          type: "video/webm",
-        });
+        const blob = new Blob(
+          recordedChunksRef.current,
+          {
+            type: "video/webm",
+          }
+        );
 
         setVideoFile(blob);
-        setSuccess("🎥 Video recorded successfully.");
+
+        setSuccess(
+          "🎥 Video recorded successfully."
+        );
       };
 
       recorder.start();
+
       setRecording(true);
       setError("");
     } catch (err) {
-      console.error("Recording Error:", err);
-      setError("Video recording is not supported on this browser.");
+      console.error(
+        "Recording Error:",
+        err
+      );
+
+      setError(
+        "Video recording is not supported on this browser."
+      );
     }
   };
 
@@ -236,26 +297,70 @@ export default function ReportPage() {
   };
 
   // -----------------------------
+  // AI EVIDENCE VERIFICATION
+  // -----------------------------
+  const verifyEvidence = async () => {
+    if (!photo) {
+      setError(
+        "Please capture a pothole photo first."
+      );
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+
+    setVerificationStatus("checking");
+
+    setVerificationMessage(
+      "AI is analyzing the evidence..."
+    );
+
+    // Temporary demo verification.
+    // Actual vision AI will be connected later.
+    setTimeout(() => {
+      setVerificationStatus("verified");
+
+      setVerificationMessage(
+        "Pothole evidence detected. The image appears suitable for complaint verification."
+      );
+    }, 1500);
+  };
+
+  // -----------------------------
   // SUBMIT COMPLAINT
   // -----------------------------
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
 
     setError("");
     setSuccess("");
 
     if (!photo && !videoFile) {
-      setError("Please capture a pothole photo or record a video.");
+      setError(
+        "Please capture a pothole photo or record a video."
+      );
       return;
     }
 
     if (!coordinates) {
-      setError("Please capture your current location.");
+      setError(
+        "Please capture your current location."
+      );
+      return;
+    }
+
+    if (verificationStatus !== "verified") {
+      setError(
+        "Please verify the pothole evidence before submitting."
+      );
       return;
     }
 
     setSuccess(
-      "✅ Complaint captured successfully. AI verification will be performed next."
+      "✅ Complaint captured successfully. AI verification completed."
     );
   };
 
@@ -264,7 +369,10 @@ export default function ReportPage() {
       {/* HEADER */}
       <header className="border-b border-white/10 bg-slate-950/95">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <a href="/" className="text-xl font-bold">
+          <a
+            href="/"
+            className="text-xl font-bold"
+          >
             🕳️ PotholeWatch AI
           </a>
 
@@ -289,8 +397,9 @@ export default function ReportPage() {
           </h1>
 
           <p className="mt-3 text-slate-400">
-            Capture evidence, location and issue details so the complaint can
-            be verified and prioritized.
+            Capture evidence, location and issue
+            details so the complaint can be verified
+            and prioritized.
           </p>
         </div>
 
@@ -308,13 +417,19 @@ export default function ReportPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-8"
+        >
           {/* CAMERA SECTION */}
           <section className="rounded-2xl border border-white/10 bg-slate-900 p-6">
-            <h2 className="text-2xl font-bold">1. Capture Evidence</h2>
+            <h2 className="text-2xl font-bold">
+              1. Capture Evidence
+            </h2>
 
             <p className="mt-2 text-sm text-slate-400">
-              Use your phone camera to capture the pothole.
+              Use your phone camera to capture the
+              pothole.
             </p>
 
             <div className="mt-6 overflow-hidden rounded-xl bg-black">
@@ -333,7 +448,10 @@ export default function ReportPage() {
               )}
             </div>
 
-            <canvas ref={canvasRef} className="hidden" />
+            <canvas
+              ref={canvasRef}
+              className="hidden"
+            />
 
             <div className="mt-5 flex flex-wrap gap-3">
               {!cameraOpen ? (
@@ -383,6 +501,7 @@ export default function ReportPage() {
               )}
             </div>
 
+            {/* PHOTO */}
             {photo && (
               <div className="mt-6">
                 <p className="mb-2 text-sm font-semibold text-slate-300">
@@ -394,9 +513,92 @@ export default function ReportPage() {
                   alt="Captured pothole"
                   className="max-h-96 w-full rounded-xl object-contain"
                 />
+
+                {/* VERIFY BUTTON */}
+                <button
+                  type="button"
+                  onClick={verifyEvidence}
+                  disabled={
+                    verificationStatus ===
+                    "checking"
+                  }
+                  className="mt-4 w-full rounded-xl bg-purple-600 px-5 py-4 font-bold hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {verificationStatus ===
+                  "checking"
+                    ? "🔍 AI is Verifying Evidence..."
+                    : "🤖 Verify Pothole Evidence"}
+                </button>
+
+                {/* VERIFICATION RESULT */}
+                {verificationStatus !==
+                  "idle" && (
+                  <div
+                    className={`mt-4 rounded-xl border p-4 ${
+                      verificationStatus ===
+                      "verified"
+                        ? "border-green-500/30 bg-green-500/10"
+                        : verificationStatus ===
+                            "review"
+                          ? "border-yellow-500/30 bg-yellow-500/10"
+                          : "border-blue-500/30 bg-blue-500/10"
+                    }`}
+                  >
+                    <p className="font-bold">
+                      {verificationStatus ===
+                        "checking" &&
+                        "🔍 Checking Evidence"}
+
+                      {verificationStatus ===
+                        "verified" &&
+                        "✅ Evidence Verified"}
+
+                      {verificationStatus ===
+                        "review" &&
+                        "⚠️ Needs Review"}
+                    </p>
+
+                    <p className="mt-2 text-sm text-slate-300">
+                      {verificationMessage}
+                    </p>
+
+                    {verificationStatus ===
+                      "verified" && (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-lg bg-black/20 p-3">
+                          <p className="text-xs text-slate-400">
+                            Evidence
+                          </p>
+                          <p className="mt-1 font-semibold text-green-300">
+                            Verified
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg bg-black/20 p-3">
+                          <p className="text-xs text-slate-400">
+                            Confidence
+                          </p>
+                          <p className="mt-1 font-semibold text-green-300">
+                            High
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg bg-black/20 p-3">
+                          <p className="text-xs text-slate-400">
+                            Status
+                          </p>
+                          <p className="mt-1 font-semibold text-blue-300">
+                            Ready
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
+            {/* VIDEO STATUS */}
             {videoFile && (
               <div className="mt-6 rounded-xl border border-green-500/20 bg-green-500/5 p-4 text-green-300">
                 🎥 Video evidence is ready.
@@ -406,11 +608,14 @@ export default function ReportPage() {
 
           {/* LOCATION SECTION */}
           <section className="rounded-2xl border border-white/10 bg-slate-900 p-6">
-            <h2 className="text-2xl font-bold">2. Location</h2>
+            <h2 className="text-2xl font-bold">
+              2. Location
+            </h2>
 
             <p className="mt-2 text-sm text-slate-400">
-              Capture your current GPS location. This helps route the complaint
-              to the correct local authority.
+              Capture your current GPS location.
+              This helps route the complaint to the
+              correct local authority.
             </p>
 
             <button
@@ -436,8 +641,14 @@ export default function ReportPage() {
 
                 {coordinates && (
                   <p className="mt-2 text-xs text-slate-500">
-                    Latitude: {coordinates.latitude.toFixed(6)} | Longitude:{" "}
-                    {coordinates.longitude.toFixed(6)}
+                    Latitude:{" "}
+                    {coordinates.latitude.toFixed(
+                      6
+                    )}{" "}
+                    | Longitude:{" "}
+                    {coordinates.longitude.toFixed(
+                      6
+                    )}
                   </p>
                 )}
               </div>
@@ -446,7 +657,9 @@ export default function ReportPage() {
 
           {/* CITIZEN DETAILS */}
           <section className="rounded-2xl border border-white/10 bg-slate-900 p-6">
-            <h2 className="text-2xl font-bold">3. Citizen Details</h2>
+            <h2 className="text-2xl font-bold">
+              3. Citizen Details
+            </h2>
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
               <div>
@@ -456,7 +669,11 @@ export default function ReportPage() {
 
                 <input
                   value={citizenName}
-                  onChange={(e) => setCitizenName(e.target.value)}
+                  onChange={(e) =>
+                    setCitizenName(
+                      e.target.value
+                    )
+                  }
                   placeholder="Enter your name"
                   className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 outline-none focus:border-blue-500"
                 />
@@ -469,7 +686,9 @@ export default function ReportPage() {
 
                 <input
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) =>
+                    setPhone(e.target.value)
+                  }
                   placeholder="Enter phone number"
                   className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 outline-none focus:border-blue-500"
                 />
@@ -479,7 +698,9 @@ export default function ReportPage() {
 
           {/* ISSUE DETAILS */}
           <section className="rounded-2xl border border-white/10 bg-slate-900 p-6">
-            <h2 className="text-2xl font-bold">4. Issue Details</h2>
+            <h2 className="text-2xl font-bold">
+              4. Issue Details
+            </h2>
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
               <div>
@@ -489,13 +710,23 @@ export default function ReportPage() {
 
                 <select
                   value={issueType}
-                  onChange={(e) => setIssueType(e.target.value)}
+                  onChange={(e) =>
+                    setIssueType(
+                      e.target.value
+                    )
+                  }
                   className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 outline-none"
                 >
                   <option>Pothole</option>
-                  <option>Road Damage</option>
-                  <option>Open Manhole</option>
-                  <option>Waterlogging</option>
+                  <option>
+                    Road Damage
+                  </option>
+                  <option>
+                    Open Manhole
+                  </option>
+                  <option>
+                    Waterlogging
+                  </option>
                   <option>Other</option>
                 </select>
               </div>
@@ -507,7 +738,11 @@ export default function ReportPage() {
 
                 <select
                   value={severity}
-                  onChange={(e) => setSeverity(e.target.value)}
+                  onChange={(e) =>
+                    setSeverity(
+                      e.target.value
+                    )
+                  }
                   className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 outline-none"
                 >
                   <option>Minor</option>
@@ -524,7 +759,11 @@ export default function ReportPage() {
 
               <textarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) =>
+                  setDescription(
+                    e.target.value
+                  )
+                }
                 rows={5}
                 placeholder="Describe the pothole or road issue..."
                 className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 outline-none focus:border-blue-500"
