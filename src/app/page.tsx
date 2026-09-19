@@ -22,6 +22,13 @@ export default function Home() {
             </Link>
 
             <Link
+              href="/dashboard"
+              className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5"
+            >
+              Dashboard
+            </Link>
+
+            <Link
               href="/report"
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-500"
             >

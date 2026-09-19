@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 type Complaint = {
   id: string;
@@ -23,6 +24,7 @@ type Complaint = {
     locationCheck: string;
   };
   assignedAuthority: string;
+  department: string;
   currentStatus: string;
   lastUpdated: string;
 };
@@ -50,6 +52,7 @@ const demoComplaints: Complaint[] = [
       locationCheck: "Location verified",
     },
     assignedAuthority: "Mysuru City Corporation",
+    department: "Road & Infrastructure",
     currentStatus: "In Progress",
     lastUpdated: "19 September 2026, 2:15 PM",
   },
@@ -65,8 +68,7 @@ const demoComplaints: Complaint[] = [
     location: "Vijayanagar, Mysuru",
     coordinates: "12.3270, 76.6060",
     severity: "Dangerous",
-    description:
-      "Deep pothole reported near a busy junction.",
+    description: "Deep pothole reported near a busy junction.",
     evidence: "Photo captured using mobile camera",
     verification: {
       status: "Verified",
@@ -75,6 +77,7 @@ const demoComplaints: Complaint[] = [
       locationCheck: "Location verified",
     },
     assignedAuthority: "Mysuru City Corporation",
+    department: "Road & Infrastructure",
     currentStatus: "Acknowledged",
     lastUpdated: "18 September 2026, 5:00 PM",
   },
@@ -100,6 +103,7 @@ const demoComplaints: Complaint[] = [
       locationCheck: "Location verified",
     },
     assignedAuthority: "Mysuru City Corporation",
+    department: "Road & Infrastructure",
     currentStatus: "Fixed",
     lastUpdated: "18 September 2026, 3:30 PM",
   },
@@ -108,7 +112,6 @@ const demoComplaints: Complaint[] = [
 const statusSteps = [
   "Submitted",
   "Acknowledged",
-  "Assigned",
   "In Progress",
   "Fixed",
 ];
@@ -118,9 +121,91 @@ export default function TrackPage() {
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [notFound, setNotFound] = useState(false);
 
-  function trackComplaint() {
+  // Automatically read complaint ID from the URL:
+  // /track?id=PW-MYS-2026-0001
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const idFromUrl = params.get("id");
+
+    if (idFromUrl) {
+      setComplaintId(idFromUrl);
+      loadComplaint(idFromUrl);
+    }
+  }, []);
+
+  async function loadComplaint(idValue: string) {
+    const id = idValue.trim().toLowerCase();
+
+    if (!id) {
+      setComplaint(null);
+      setNotFound(true);
+      return;
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from("complaints")
+          .select("*")
+          .eq("id", idValue.trim())
+          .maybeSingle();
+
+        if (!error && data) {
+          setComplaint(normalizeSupabaseComplaint(data));
+          setNotFound(false);
+          return;
+        }
+      } catch (error) {
+        console.error("Supabase complaint lookup failed:", error);
+      }
+    }
+
+    // 1. First check complaints created by this browser/user.
+    const storedComplaint = localStorage.getItem(
+      `complaint_${idValue.trim()}`
+    );
+
+    if (storedComplaint) {
+      try {
+        const parsedComplaint = JSON.parse(storedComplaint);
+
+        setComplaint(parsedComplaint);
+        setNotFound(false);
+        return;
+      } catch {
+        // Continue to demo complaints.
+      }
+    }
+
+    // 2. Check all locally saved user complaints.
+    const storedUserComplaints = localStorage.getItem(
+      "potholewatch_user_complaints"
+    );
+
+    if (storedUserComplaints) {
+      try {
+        const complaints = JSON.parse(storedUserComplaints);
+
+        if (Array.isArray(complaints)) {
+          const userComplaint = complaints.find(
+            (item: Complaint) =>
+              item?.id?.toLowerCase() === id
+          );
+
+          if (userComplaint) {
+            setComplaint(userComplaint);
+            setNotFound(false);
+            return;
+          }
+        }
+      } catch {
+        // Continue to demo complaints.
+      }
+    }
+
+    // 3. Finally check demo complaints.
     const result = demoComplaints.find(
-      (item) => item.id.toLowerCase() === complaintId.trim().toLowerCase()
+      (item) => item.id.toLowerCase() === id
     );
 
     if (result) {
@@ -130,6 +215,49 @@ export default function TrackPage() {
       setComplaint(null);
       setNotFound(true);
     }
+  }
+
+  function normalizeSupabaseComplaint(row: Record<string, unknown>): Complaint {
+    return {
+      id: String(row.id || ""),
+      registeredBy: {
+        name: String(row.registered_name || "Citizen"),
+        phone: String(row.registered_phone || "Not provided"),
+        email: String(row.registered_email || "Not provided"),
+        registeredOn: formatDate(row.registered_on),
+      },
+      issue: String(row.issue || "Unknown"),
+      location: String(row.location || "Not provided"),
+      coordinates: String(row.coordinates || "Not provided"),
+      severity: String(row.severity || "Not provided"),
+      description: String(row.description || "Not provided"),
+      evidence: String(row.evidence || "Not provided"),
+      verification: {
+        status: String(row.verification_status || "Not provided"),
+        confidence: String(row.verification_confidence || "Not provided"),
+        duplicateCheck: String(row.duplicate_check || "Not provided"),
+        locationCheck: String(row.location_check || "Not provided"),
+      },
+      assignedAuthority: String(row.assigned_authority || "Not assigned"),
+      department: String(row.department || "Not assigned"),
+      currentStatus: String(row.current_status || "Submitted"),
+      lastUpdated: formatDate(row.last_updated),
+    };
+  }
+
+  function formatDate(value: unknown) {
+    if (!value) {
+      return "Not available";
+    }
+
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime())
+      ? String(value)
+      : date.toLocaleString();
+  }
+
+  function trackComplaint() {
+    loadComplaint(complaintId);
   }
 
   function getStatusIndex(status: string) {
@@ -149,7 +277,14 @@ export default function TrackPage() {
             href="/report"
             className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
           >
-            Report Pothole
+            Report Civic Issue
+          </a>
+
+          <a
+            href="/dashboard"
+            className="text-sm font-semibold text-slate-300 hover:text-cyan-300"
+          >
+            Dashboard
           </a>
         </div>
       </header>
@@ -166,9 +301,9 @@ export default function TrackPage() {
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl text-slate-400">
-            Enter your complaint ID to view the registered person, complaint
-            details, verification information, authority assignment, and live
-            status.
+            Enter your complaint ID to view the registered person,
+            complaint details, verification information, authority
+            assignment, and status.
           </p>
         </div>
 
@@ -181,13 +316,16 @@ export default function TrackPage() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <input
               value={complaintId}
-              onChange={(e) => setComplaintId(e.target.value)}
+              onChange={(e) => {
+                setComplaintId(e.target.value);
+                setNotFound(false);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   trackComplaint();
                 }
               }}
-              placeholder="Example: PW-MYS-1001"
+              placeholder="Example: PW-MYS-2026-0001"
               className="flex-1 rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none placeholder:text-slate-600 focus:border-cyan-400"
             />
 
@@ -200,7 +338,8 @@ export default function TrackPage() {
           </div>
 
           <p className="mt-3 text-xs text-slate-500">
-            Demo IDs: PW-MYS-1001, PW-MYS-1002, PW-MYS-1003
+            You can enter the Complaint ID generated after submitting a
+            complaint.
           </p>
         </div>
 
@@ -224,7 +363,9 @@ export default function TrackPage() {
             <div className="rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-400/10 to-white/5 p-6">
               <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                 <div>
-                  <p className="text-sm text-slate-400">Complaint ID</p>
+                  <p className="text-sm text-slate-400">
+                    Complaint ID
+                  </p>
 
                   <h2 className="mt-1 text-3xl font-bold text-cyan-300">
                     {complaint.id}
@@ -245,7 +386,10 @@ export default function TrackPage() {
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-bold">Registered By</h3>
+                  <h3 className="text-xl font-bold">
+                    Registered By
+                  </h3>
+
                   <p className="text-sm text-slate-400">
                     Person who submitted this complaint
                   </p>
@@ -260,12 +404,16 @@ export default function TrackPage() {
 
                 <InfoItem
                   label="Phone Number"
-                  value={maskPhone(complaint.registeredBy.phone)}
+                  value={maskPhone(
+                    complaint.registeredBy.phone
+                  )}
                 />
 
                 <InfoItem
                   label="Email"
-                  value={maskEmail(complaint.registeredBy.email)}
+                  value={maskEmail(
+                    complaint.registeredBy.email
+                  )}
                 />
 
                 <InfoItem
@@ -283,7 +431,10 @@ export default function TrackPage() {
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-bold">Complaint Details</h3>
+                  <h3 className="text-xl font-bold">
+                    Complaint Details
+                  </h3>
+
                   <p className="text-sm text-slate-400">
                     Information submitted by the citizen
                   </p>
@@ -291,9 +442,15 @@ export default function TrackPage() {
               </div>
 
               <div className="grid gap-5 sm:grid-cols-2">
-                <InfoItem label="Issue Type" value={complaint.issue} />
+                <InfoItem
+                  label="Issue Type"
+                  value={complaint.issue}
+                />
 
-                <InfoItem label="Severity" value={complaint.severity} />
+                <InfoItem
+                  label="Severity"
+                  value={complaint.severity}
+                />
 
                 <InfoItem
                   label="Location"
@@ -313,6 +470,11 @@ export default function TrackPage() {
                 <InfoItem
                   label="Assigned Authority"
                   value={complaint.assignedAuthority}
+                />
+
+                <InfoItem
+                  label="Department"
+                  value={complaint.department}
                 />
               </div>
 
@@ -537,7 +699,8 @@ function maskEmail(email: string) {
     return email;
   }
 
-  const visibleName = name.length > 2 ? name.slice(0, 2) : name[0];
+  const visibleName =
+    name.length > 2 ? name.slice(0, 2) : name[0];
 
   return `${visibleName}***@${domain}`;
 }

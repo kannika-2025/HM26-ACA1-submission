@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 type VerificationStatus =
   | "idle"
@@ -103,6 +104,9 @@ export default function ReportPage() {
 
   const [submitted, setSubmitted] =
     useState(false);
+
+  const [syncMessage, setSyncMessage] =
+    useState("");
 
   const [isLoadingUser, setIsLoadingUser] =
     useState(true);
@@ -713,7 +717,23 @@ export default function ReportPage() {
   // SUBMIT COMPLAINT
   // ---------------------------------------------------------
 
-  function submitComplaint() {
+  function getDepartment(issue: string) {
+    const departmentMap: Record<string, string> = {
+      Pothole: "Road & Infrastructure",
+      "Road Damage": "Road & Infrastructure",
+      "Open Manhole": "Drainage / Sewerage",
+      "Broken Streetlight": "Electrical / Street Lighting",
+      "Water Leakage": "Water Supply",
+      "Garbage / Waste Dumping": "Solid Waste Management",
+      "Waste Dumping": "Solid Waste Management",
+      "Overflowing Garbage Bin": "Solid Waste Management",
+      "Unsegregated Waste": "Solid Waste Management",
+    };
+
+    return departmentMap[issue] || "Road & Infrastructure";
+  }
+
+  async function submitComplaint() {
     if (!name.trim()) {
       alert(
         "Please enter your full name."
@@ -796,17 +816,18 @@ export default function ReportPage() {
       complaintId:
         generatedId,
 
-      registeredBy:
-        loggedInUser?.name ||
-        name.trim(),
-
-      email:
-        loggedInUser?.email ||
-        email.trim(),
-
-      phone:
-        loggedInUser?.phone ||
-        phone.trim(),
+      registeredBy: {
+        name:
+          loggedInUser?.name ||
+          name.trim(),
+        phone:
+          loggedInUser?.phone ||
+          phone.trim(),
+        email:
+          loggedInUser?.email ||
+          email.trim(),
+        registeredOn: currentTime,
+      },
 
       registeredOn:
         currentTime,
@@ -822,16 +843,13 @@ export default function ReportPage() {
         6
       )}, ${longitude.toFixed(6)}`,
 
+      coordinates: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+
       latitude,
 
       longitude,
 
-      evidence: {
-        type: photo
-          ? "Photo"
-          : "Video",
-        available: true,
-      },
+      evidence: photo ? "Photo" : "Video",
 
       verification: {
         status: "VERIFIED",
@@ -843,6 +861,10 @@ export default function ReportPage() {
 
         model:
           verificationModel,
+
+        duplicateCheck: "No duplicate detected",
+
+        locationCheck: "Location verified",
       },
 
       authority: {
@@ -856,11 +878,17 @@ export default function ReportPage() {
           authority.confidence,
       },
 
-      status: "Registered",
+      status: "Submitted",
+
+      currentStatus: "Submitted",
+
+      assignedAuthority: authority.name,
+
+      department: getDepartment(issueType),
 
       statusHistory: [
         {
-          status: "Registered",
+          status: "Submitted",
           timestamp:
             currentTime,
         },
@@ -874,6 +902,55 @@ export default function ReportPage() {
           ? "Medium"
           : "Low",
     };
+
+    setSyncMessage("");
+
+    if (isSupabaseConfigured) {
+      try {
+        const { error } = await supabase.from("complaints").insert({
+          id: generatedId,
+          registered_name: complaint.registeredBy.name,
+          registered_phone: complaint.registeredBy.phone,
+          registered_email: complaint.registeredBy.email,
+          registered_on: currentTime,
+          issue: complaint.issue,
+          location: complaint.location,
+          coordinates: complaint.coordinates,
+          severity: complaint.severity,
+          description: complaint.description,
+          evidence: complaint.evidence,
+          verification_status: complaint.verification.status,
+          verification_confidence: String(
+            complaint.verification.confidence
+          ),
+          duplicate_check: "No duplicate detected",
+          location_check: "Location verified",
+          assigned_authority: complaint.authority.name,
+          department: getDepartment(complaint.issue),
+          current_status: "Submitted",
+          last_updated: currentTime,
+          created_at: currentTime,
+        });
+
+        if (!error) {
+          setSyncMessage("Online complaint record created.");
+        } else {
+          console.error("Supabase complaint insert failed:", error);
+          setSyncMessage(
+            "Saved on this device. Online sync is temporarily unavailable."
+          );
+        }
+      } catch (error) {
+        console.error("Supabase complaint insert failed:", error);
+        setSyncMessage(
+          "Saved on this device. Online sync is temporarily unavailable."
+        );
+      }
+    } else {
+      setSyncMessage(
+        "Saved on this device. Online sync is not configured."
+      );
+    }
 
     // Save complete complaint.
     localStorage.setItem(
@@ -1018,6 +1095,13 @@ export default function ReportPage() {
             Track Complaint
           </Link>
 
+          <Link
+            href="/dashboard"
+            className="text-sm font-semibold text-slate-300 transition hover:text-cyan-300"
+          >
+            Dashboard
+          </Link>
+
         </div>
       </header>
 
@@ -1118,6 +1202,12 @@ export default function ReportPage() {
                 </p>
 
               </div>
+
+              {syncMessage && (
+                <p className="mt-4 text-xs text-slate-400">
+                  {syncMessage}
+                </p>
+              )}
 
               <div className="mt-6 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-5">
 
