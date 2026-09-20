@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 type ComplaintRow = {
@@ -43,13 +44,19 @@ type DashboardState =
   | "ready";
 
 export default function DashboardPage() {
+  const router = useRouter();
+
   const [complaints, setComplaints] = useState<ComplaintRow[]>([]);
-  const [dashboardState, setDashboardState] = useState<DashboardState>(
-    isSupabaseConfigured ? "loading" : "missing_config"
-  );
+  const [dashboardState, setDashboardState] =
+    useState<DashboardState>("loading");
+
   const [queryError, setQueryError] = useState("");
   const [isOfficeHead, setIsOfficeHead] = useState(false);
+  const [checkingRole, setCheckingRole] = useState(true);
 
+  // --------------------------------------------------
+  // OFFICE HEAD ACCESS CONTROL
+  // --------------------------------------------------
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem(
@@ -57,17 +64,28 @@ export default function DashboardPage() {
       );
 
       if (!storedUser) {
-        setIsOfficeHead(false);
+        router.replace("/login");
         return;
       }
 
       const user = JSON.parse(storedUser);
-      setIsOfficeHead(user?.role === "office_head");
-    } catch {
-      setIsOfficeHead(false);
-    }
-  }, []);
 
+      if (user?.role !== "office_head") {
+        router.replace("/report");
+        return;
+      }
+
+      setIsOfficeHead(true);
+      setCheckingRole(false);
+    } catch {
+      router.replace("/login");
+    }
+  }, [router]);
+
+  // --------------------------------------------------
+  // UPDATE COMPLAINT STATUS
+  // ONLY OFFICE HEAD CAN CALL THIS FROM THE UI
+  // --------------------------------------------------
   async function updateComplaintStatus(
     complaintId: string | null,
     newStatus: string
@@ -102,7 +120,13 @@ export default function DashboardPage() {
     );
   }
 
+  // --------------------------------------------------
+  // LOAD DASHBOARD DATA
+  // ONLY AFTER OFFICE HEAD IS VERIFIED
+  // --------------------------------------------------
   useEffect(() => {
+    if (!isOfficeHead) return;
+
     console.info("Dashboard Supabase configuration:", {
       hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
       hasAnonKey: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
@@ -112,6 +136,8 @@ export default function DashboardPage() {
       console.error(
         "Dashboard Supabase configuration error: required public environment variable is missing."
       );
+
+      setDashboardState("missing_config");
       return;
     }
 
@@ -158,6 +184,7 @@ export default function DashboardPage() {
           });
 
           setComplaints(rows);
+
           setDashboardState(
             rows.length === 0 ? "empty" : "ready"
           );
@@ -179,7 +206,29 @@ export default function DashboardPage() {
     }
 
     loadStatistics();
-  }, []);
+  }, [isOfficeHead]);
+
+  // --------------------------------------------------
+  // ROLE CHECK LOADING
+  // --------------------------------------------------
+  if (checkingRole) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-white">
+        <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-slate-400">
+            Checking authorized access...
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  // --------------------------------------------------
+  // SAFETY CHECK
+  // --------------------------------------------------
+  if (!isOfficeHead) {
+    return null;
+  }
 
   const countStatus = (status: string) =>
     complaints.filter(
@@ -229,9 +278,10 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
+
         <div className="mb-10">
           <p className="text-sm font-semibold uppercase tracking-widest text-cyan-400">
-            Public overview
+            Office Head Console
           </p>
 
           <h1 className="mt-3 text-4xl font-bold sm:text-5xl">
@@ -239,15 +289,13 @@ export default function DashboardPage() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-slate-400">
-            A live summary of complaints recorded in
+            Manage and track civic complaints recorded in
             PotholeWatch AI.
           </p>
 
-          {isOfficeHead && (
-            <div className="mt-4 inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-300">
-              Office Head Mode
-            </div>
-          )}
+          <div className="mt-4 inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-300">
+            🛡️ Office Head Mode
+          </div>
         </div>
 
         {dashboardState === "loading" && (
@@ -482,6 +530,7 @@ function ComplaintList({
                     "Authority not assigned"}
                 </p>
 
+                {/* OFFICE HEAD ONLY */}
                 {isOfficeHead && (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {status === "Submitted" && (
