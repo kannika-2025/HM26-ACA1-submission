@@ -10,6 +10,7 @@ type Detection = {
   reason: string;
   evidenceStatus: string;
   canCreateComplaint: boolean;
+  manualReview?: boolean;
 };
 
 type User = {
@@ -29,6 +30,7 @@ const departmentMap: Record<string, string> = {
   Drain: "Drainage / Sewerage",
   "Broken Streetlight": "Electrical / Street Lighting",
   "Water Leakage": "Water Supply",
+  "Needs manual review": "Human Review",
 };
 
 export default function DetectPage() {
@@ -134,6 +136,22 @@ export default function DetectPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        if (data?.category === "quota_or_rate_limit") {
+          const manualReview: Detection = {
+            issue: "Needs manual review",
+            confidence: 0,
+            evidenceStatus: "NEEDS_REVIEW",
+            reason:
+              "AI verification temporarily unavailable. Evidence will require manual review.",
+            canCreateComplaint: true,
+            manualReview: true,
+          };
+
+          setDetection(manualReview);
+          setMessage(manualReview.reason);
+          return;
+        }
+
         throw new Error(data?.error || "AI analysis failed.");
       }
 
@@ -182,13 +200,16 @@ export default function DetectPage() {
       return;
     }
 
-    if (!detection.issue || detection.issue === "Unknown") {
+    if (
+      !detection.issue ||
+      (detection.issue === "Unknown" && !detection.manualReview)
+    ) {
       console.error("AI Civic Scan validation failed: issue is missing", detection);
       setMessage("Cannot create complaint: no supported civic issue was detected.");
       return;
     }
 
-    if (!detection.canCreateComplaint) {
+    if (!detection.manualReview && !detection.canCreateComplaint) {
       console.error(
         "AI Civic Scan validation failed: verification is not sufficient",
         detection
@@ -205,7 +226,10 @@ export default function DetectPage() {
       return;
     }
 
-    if (!Number.isFinite(detection.confidence) || detection.confidence < 70) {
+    if (
+      !detection.manualReview &&
+      (!Number.isFinite(detection.confidence) || detection.confidence < 70)
+    ) {
       console.error("AI Civic Scan validation failed: confidence is too low", detection);
       setMessage(
         `Cannot create complaint: AI confidence is ${detection.confidence ?? 0}%, but at least 70% is required.`
@@ -256,8 +280,11 @@ export default function DetectPage() {
         severity: "Major",
         description: detection.reason,
         evidence: "Photo captured or uploaded",
-        verification_status:
-          complaintLatitude === null ? "NEEDS_REVIEW" : "VERIFIED",
+        verification_status: detection.manualReview
+          ? "Needs Review"
+          : complaintLatitude === null
+            ? "Needs Review"
+            : "VERIFIED",
         verification_confidence: String(detection.confidence),
         duplicate_check: "Not checked",
         location_check:
@@ -443,10 +470,17 @@ export default function DetectPage() {
         {detection && (
           <div className="mt-6 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-6">
             <h2 className="text-2xl font-bold text-cyan-200">
-              {detection.canCreateComplaint ? "Possible civic issue detected" : "Needs human review"}
+              {detection.manualReview
+                ? "Needs manual review"
+                : detection.canCreateComplaint
+                  ? "Possible civic issue detected"
+                  : "Needs human review"}
             </h2>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Result label="Detected issue" value={detection.issue === "Unknown" ? "No clear civic issue" : detection.issue} />
+              <Result
+                label="Detected issue"
+                value={detection.manualReview ? "Needs manual review" : detection.issue === "Unknown" ? "No clear civic issue" : detection.issue}
+              />
               <Result label="Confidence" value={`${detection.confidence}%`} />
               <Result label="Recommended department" value={department} />
               <Result label="Recommended authority" value={routeAuthority(latitude, longitude)} />
