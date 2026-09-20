@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { verifyLocation, type LocationVerification } from "@/lib/location";
 
 type Detection = {
   issue: string;
@@ -84,6 +85,7 @@ export default function DetectPage() {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [user, setUser] = useState<User>({});
   const [duplicateMatch, setDuplicateMatch] = useState<DuplicateMatch | null>(null);
+  const [locationVerification, setLocationVerification] = useState<LocationVerification | null>(null);
 
   useEffect(() => {
     setIsLoggedIn(
@@ -109,6 +111,7 @@ export default function DetectPage() {
     setPreviewUrl(URL.createObjectURL(file));
     setDetection(null);
     setDuplicateMatch(null);
+    setLocationVerification(null);
     setMessage("");
   }
 
@@ -122,6 +125,7 @@ export default function DetectPage() {
       (position) => {
         setLatitude(position.coords.latitude);
         setLongitude(position.coords.longitude);
+        setLocationVerification(verifyLocation(position.coords.latitude, position.coords.longitude));
         setMessage("Location captured successfully.");
       },
       () => setMessage("Location was not available. You can still review the scan.")
@@ -144,6 +148,7 @@ export default function DetectPage() {
             };
             setLatitude(nextLocation.latitude);
             setLongitude(nextLocation.longitude);
+            setLocationVerification(verifyLocation(nextLocation.latitude, nextLocation.longitude));
             resolve(nextLocation);
           },
           (error) => {
@@ -272,6 +277,9 @@ export default function DetectPage() {
       const newCoordinates = validCoordinates(complaintLatitude, complaintLongitude)
         ? { latitude: complaintLatitude as number, longitude: complaintLongitude as number }
         : null;
+      const locationCheck = verifyLocation(complaintLatitude, complaintLongitude);
+      setLocationVerification(locationCheck);
+      console.info("Location verification result", locationCheck);
       const evidenceHash = image
         ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await image.arrayBuffer())))
             .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -355,10 +363,9 @@ export default function DetectPage() {
 
       const id = `PW-MYS-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
       const now = new Date().toISOString();
-      const authority = routeAuthority(
-        complaintLatitude,
-        complaintLongitude
-      );
+      const authority = locationCheck.canRouteConfidently
+        ? routeAuthority(complaintLatitude, complaintLongitude)
+        : "Manual Review";
       const location =
         complaintLatitude !== null && complaintLongitude !== null
           ? `GPS: ${complaintLatitude.toFixed(6)}, ${complaintLongitude.toFixed(6)}`
@@ -381,15 +388,14 @@ export default function DetectPage() {
         evidence: evidenceHash
           ? `Photo captured or uploaded; evidence_hash:${evidenceHash}`
           : "Photo captured or uploaded",
-        verification_status: detection.manualReview || !newCoordinates || detection.evidenceStatus !== "VERIFIED"
+        verification_status: detection.manualReview || !locationCheck.canRouteConfidently || detection.evidenceStatus !== "VERIFIED"
           ? "Needs Review"
           : "VERIFIED",
         verification_confidence: String(detection.confidence),
         duplicate_check: duplicateMatch ? `${duplicateMatch.kind}: ${duplicateMatch.complaintId}` : "No duplicate detected",
-        location_check:
-          complaintLatitude === null ? "Location unavailable" : "Location captured",
+        location_check: locationCheck.status,
         assigned_authority: authority,
-        department,
+        department: locationCheck.canRouteConfidently ? department : "Human Review",
         current_status: "Submitted",
         last_updated: now,
         created_at: now,
@@ -414,6 +420,8 @@ export default function DetectPage() {
         ...row,
         ...(hasEvidenceHashColumn ? { evidence_hash: evidenceHash } : {}),
         ...(schemaColumns.has("verification_reason") ? { verification_reason: detection.reason } : {}),
+        ...(schemaColumns.has("location_verification_reason") ? { location_verification_reason: locationCheck.reason } : {}),
+        ...(schemaColumns.has("location_verification_reason") ? { location_verification_reason: locationCheck.reason } : {}),
         ...(schemaColumns.has("duplicate_of") && duplicateMatch ? { duplicate_of: duplicateMatch.complaintId } : {}),
       };
       console.info("Duplicate detection: schema capability", {
@@ -601,9 +609,19 @@ export default function DetectPage() {
               <Result label="Evidence status" value={detection.verificationStatus || (detection.manualReview ? "Needs Review" : detection.evidenceStatus === "VERIFIED" ? "Verified" : "Needs Review")} />
               <Result label="Evidence quality" value={detection.evidenceQuality || "Review required"} />
               <Result label="Recommended department" value={department} />
-              <Result label="Recommended authority" value={routeAuthority(latitude, longitude)} />
+              <Result label="Location check" value={locationVerification?.status || "Not checked"} />
+              <Result label="Recommended authority" value={locationVerification?.canRouteConfidently ? routeAuthority(latitude, longitude) : "Manual Review"} />
+              <Result label="Department" value={locationVerification?.canRouteConfidently ? department : "Human Review"} />
             </div>
             <p className="mt-5 text-sm leading-6 text-slate-300">{detection.reason}</p>
+            {locationVerification && (
+              <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
+                <p className="font-semibold">Location Check</p>
+                <p className="mt-1">Status: {locationVerification.status}</p>
+                <p className="mt-1">{locationVerification.reason}</p>
+                {!locationVerification.canRouteConfidently && <p className="mt-2">Verification Status: Needs Review. The complaint can still be created.</p>}
+              </div>
+            )}
             {duplicateMatch && !complaintId && (
               <div className="mt-5 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
                 <p className="font-semibold">Similar complaint already exists</p>

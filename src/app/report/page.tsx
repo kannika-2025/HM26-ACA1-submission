@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { verifyLocation, type LocationVerification } from "@/lib/location";
 
 type VerificationStatus =
   | "idle"
@@ -112,6 +113,7 @@ export default function ReportPage() {
     status: string;
     area: string;
   } | null>(null);
+  const [locationVerification, setLocationVerification] = useState<LocationVerification | null>(null);
 
   const [isLoadingUser, setIsLoadingUser] =
     useState(true);
@@ -419,6 +421,11 @@ export default function ReportPage() {
 
         setLatitude(lat);
         setLongitude(lng);
+        const check = verifyLocation(lat, lng);
+        setLocationVerification(check);
+        if (!check.canRouteConfidently) {
+          setAuthority({ name: "Manual Review", reason: check.reason, confidence: "Manual review" });
+        }
 
         setLocationStatus(
           "Location captured successfully"
@@ -518,10 +525,13 @@ export default function ReportPage() {
       latitude !== null &&
       longitude !== null
     ) {
-      calculateAuthority(
-        latitude,
-        longitude
-      );
+      const check = verifyLocation(latitude, longitude);
+      setLocationVerification(check);
+      if (check.canRouteConfidently) {
+        calculateAuthority(latitude, longitude);
+      } else {
+        setAuthority({ name: "Manual Review", reason: check.reason, confidence: "Manual review" });
+      }
     }
   }, [
     latitude,
@@ -769,10 +779,16 @@ export default function ReportPage() {
       return;
     }
 
-    const needsReview = manualReview || verificationStatus !== "verified";
-    const selectedAuthority = authority || {
+    const locationCheck = verifyLocation(latitude, longitude);
+    setLocationVerification(locationCheck);
+    const needsReview = manualReview || verificationStatus !== "verified" || !locationCheck.canRouteConfidently;
+    const selectedAuthority = locationCheck.canRouteConfidently ? authority || {
       name: "City Corporation",
       reason: "Location was not available, so the complaint will be reviewed by the city civic desk.",
+      confidence: "Manual review",
+    } : {
+      name: "Manual Review",
+      reason: locationCheck.reason,
       confidence: "Manual review",
     };
     setAuthority(selectedAuthority);
@@ -796,7 +812,7 @@ export default function ReportPage() {
         setSyncMessage("Complaint data is temporarily unavailable. Please try again.");
         return;
       }
-      const currentCoordinates = latitude !== null && longitude !== null
+      const currentCoordinates = locationCheck.canRouteConfidently && latitude !== null && longitude !== null
         ? { latitude, longitude }
         : null;
       const parseCoordinates = (value: unknown) => {
@@ -917,10 +933,8 @@ export default function ReportPage() {
 
           duplicateCheck: duplicateMatch ? `Potential duplicate: ${duplicateMatch.id}` : "No duplicate detected",
 
-        locationCheck:
-          latitude !== null && longitude !== null
-            ? "Location verified"
-            : "Location unavailable - manual review required",
+        locationCheck: locationCheck.status,
+        locationVerificationReason: locationCheck.reason,
       },
 
       authority: {
@@ -940,7 +954,7 @@ export default function ReportPage() {
 
       assignedAuthority: selectedAuthority.name,
 
-      department: needsReview
+          department: needsReview
         ? "Human Review"
         : getDepartment(issueType),
 
@@ -979,7 +993,9 @@ export default function ReportPage() {
           complaint.verification.duplicateCheck = duplicateCheck;
         }
 
-        const { error } = await supabase.from("complaints").insert({
+        const { data: schemaSample } = await supabase.from("complaints").select("*").limit(1);
+        const schemaColumns = new Set(Object.keys(schemaSample?.[0] || {}));
+        const insertRow = {
           id: generatedId,
           registered_name: complaint.registeredBy.name,
           registered_phone: complaint.registeredBy.phone,
@@ -996,13 +1012,15 @@ export default function ReportPage() {
             complaint.verification.confidence
           ),
           duplicate_check: duplicateCheck,
-          location_check: "Location verified",
+          location_check: locationCheck.status,
           assigned_authority: complaint.authority.name,
           department: complaint.department,
           current_status: "Submitted",
           last_updated: currentTime,
           created_at: currentTime,
-        });
+          ...(schemaColumns.has("location_verification_reason") ? { location_verification_reason: locationCheck.reason } : {}),
+        };
+        const { error } = await supabase.from("complaints").insert(insertRow);
 
         if (!error) {
           setSyncMessage("Online complaint record created.");
@@ -1560,6 +1578,16 @@ export default function ReportPage() {
                   )}
 
               </div>
+
+              {locationVerification && (
+                <div className="mt-5 rounded-xl border border-amber-400/20 bg-amber-400/10 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Location Check</p>
+                  <p className="mt-2 font-semibold text-white">Status: {locationVerification.status}</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-300">{locationVerification.reason}</p>
+                  <p className="mt-2 text-xs text-slate-400">Coordinates: {locationVerification.coordinates}</p>
+                  {!locationVerification.canRouteConfidently && <p className="mt-2 text-sm text-amber-200">Verification Status: Needs Review. You can still submit this complaint.</p>}
+                </div>
+              )}
 
               {authority && (
                 <div className="mt-5 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-5">
