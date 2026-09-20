@@ -38,11 +38,17 @@ export default function DetectPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [message, setMessage] = useState("");
+  const [complaintId, setComplaintId] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [user, setUser] = useState<User>({});
 
   useEffect(() => {
+    setIsLoggedIn(
+      localStorage.getItem("potholewatch_logged_in") === "true"
+    );
+
     const storedUser = localStorage.getItem("potholewatch_current_user");
     if (storedUser) {
       try {
@@ -77,6 +83,34 @@ export default function DetectPage() {
         setMessage("Location captured successfully.");
       },
       () => setMessage("Location was not available. You can still review the scan.")
+    );
+  }
+
+  function requestLocation() {
+    return new Promise<{ latitude: number; longitude: number } | null>(
+      (resolve) => {
+        if (!navigator.geolocation) {
+          resolve(null);
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const nextLocation = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            };
+            setLatitude(nextLocation.latitude);
+            setLongitude(nextLocation.longitude);
+            resolve(nextLocation);
+          },
+          (error) => {
+            console.warn("GPS unavailable during complaint creation:", error);
+            resolve(null);
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+        );
+      }
     );
   }
 
@@ -138,51 +172,79 @@ export default function DetectPage() {
       return;
     }
 
-    setIsCreating(true);
-    const id = `PW-MYS-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const now = new Date().toISOString();
-    const authority = routeAuthority(latitude, longitude);
-    const department = departmentMap[detection.issue] || "Road & Infrastructure";
-    const location =
-      latitude !== null && longitude !== null
-        ? `GPS: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
-        : "Location not captured";
+    if (!isLoggedIn || !user.name) {
+      setMessage("Please register or login first to create a complaint.");
+      return;
+    }
 
-    const row = {
-      id,
-      registered_name: user.name || "Anonymous citizen",
-      registered_phone: user.phone || "",
-      registered_email: user.email || "",
-      registered_on: now,
-      issue: detection.issue,
-      location,
-      coordinates:
-        latitude !== null && longitude !== null
-          ? `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
-          : "Not available",
-      severity: "Major",
-      description: detection.reason,
-      evidence: "Photo captured or uploaded",
-      verification_status: latitude === null ? "NEEDS_REVIEW" : "VERIFIED",
-      verification_confidence: String(detection.confidence),
-      duplicate_check: "Needs review if a duplicate is reported",
-      location_check: latitude === null ? "Needs review" : "Location captured",
-      assigned_authority: authority,
-      department,
-      current_status: "Submitted",
-      last_updated: now,
-      created_at: now,
-    };
+    setIsCreating(true);
+    setMessage("Creating complaint and checking your location...");
 
     try {
+      const locationResult =
+        latitude !== null && longitude !== null
+          ? { latitude, longitude }
+          : await requestLocation();
+      const complaintLatitude = locationResult?.latitude ?? null;
+      const complaintLongitude = locationResult?.longitude ?? null;
+      const id = `PW-MYS-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const now = new Date().toISOString();
+      const authority = routeAuthority(
+        complaintLatitude,
+        complaintLongitude
+      );
+      const department = departmentMap[detection.issue] || "Road & Infrastructure";
+      const location =
+        complaintLatitude !== null && complaintLongitude !== null
+          ? `GPS: ${complaintLatitude.toFixed(6)}, ${complaintLongitude.toFixed(6)}`
+          : "Location unavailable";
+
+      const row = {
+        id,
+        registered_name: user.name,
+        registered_phone: user.phone || "",
+        registered_email: user.email || "",
+        registered_on: now,
+        issue: detection.issue,
+        location,
+        coordinates:
+          complaintLatitude !== null && complaintLongitude !== null
+            ? `${complaintLatitude.toFixed(6)}, ${complaintLongitude.toFixed(6)}`
+            : "Location unavailable",
+        severity: "Major",
+        description: detection.reason,
+        evidence: "Photo captured or uploaded",
+        verification_status:
+          complaintLatitude === null ? "NEEDS_REVIEW" : "VERIFIED",
+        verification_confidence: String(detection.confidence),
+        duplicate_check: "Not checked",
+        location_check:
+          complaintLatitude === null ? "Location unavailable" : "Location captured",
+        assigned_authority: authority,
+        department,
+        current_status: "Submitted",
+        last_updated: now,
+        created_at: now,
+      };
+
+      let syncWarning = "";
+
       if (isSupabaseConfigured) {
-        const { error } = await supabase.from("complaints").insert(row);
-        if (error) {
-          throw error;
+        try {
+          const { error } = await supabase.from("complaints").insert(row);
+          if (error) {
+            console.error("Supabase detection complaint insert failed:", error);
+            syncWarning = `Online sync failed: ${error.message}`;
+          }
+        } catch (error) {
+          console.error("Supabase detection complaint request failed:", error);
+          syncWarning = "Online sync failed due to a network error.";
         }
+      } else {
+        syncWarning = "Online sync is not configured.";
       }
 
-      localStorage.setItem(`complaint_${id}`, JSON.stringify({
+      const localComplaint = {
         id,
         registeredBy: {
           name: row.registered_name,
@@ -204,43 +266,36 @@ export default function DetectPage() {
         },
         assignedAuthority: authority,
         department,
-        currentStatus: "Submitted",
+        currentStatus: row.current_status,
         lastUpdated: now,
         createdAt: now,
-      }));
-      setMessage(`Complaint created: ${id}`);
+      };
+      localStorage.setItem(`complaint_${id}`, JSON.stringify(localComplaint));
+      localStorage.setItem("latest_complaint_id", id);
+      setComplaintId(id);
+      setMessage(
+        syncWarning
+          ? `Complaint Created Successfully. ${syncWarning} Saved locally as a fallback.`
+          : "Complaint Created Successfully"
+      );
     } catch (error) {
       console.error("Detection complaint creation failed:", error);
-      localStorage.setItem(`complaint_${id}`, JSON.stringify({
-        id,
-        registeredBy: {
-          name: row.registered_name,
-          phone: row.registered_phone,
-          email: row.registered_email,
-          registeredOn: now,
-        },
-        issue: row.issue,
-        location: row.location,
-        coordinates: row.coordinates,
-        severity: row.severity,
-        description: row.description,
-        evidence: row.evidence,
-        verification: {
-          status: "NEEDS_REVIEW",
-          confidence: row.verification_confidence,
-          duplicateCheck: row.duplicate_check,
-          locationCheck: row.location_check,
-        },
-        assignedAuthority: authority,
-        department,
-        currentStatus: "Submitted",
-        lastUpdated: now,
-        createdAt: now,
-      }));
-      setMessage(`Saved locally as ${id}; online sync is unavailable.`);
+      setMessage(
+        error instanceof Error
+          ? `Unable to create complaint: ${error.message}`
+          : "Unable to create complaint. Please try again."
+      );
     } finally {
       setIsCreating(false);
     }
+  }
+
+  function resetScan() {
+    setImage(null);
+    setPreviewUrl("");
+    setDetection(null);
+    setComplaintId(null);
+    setMessage("");
   }
 
   const department = detection
@@ -289,7 +344,42 @@ export default function DetectPage() {
           </div>
 
           {message && <p className="mt-4 text-sm text-slate-300">{message}</p>}
+
+          {!isLoggedIn && (
+            <p className="mt-4 text-sm text-orange-200">
+              Please register or login first to create a complaint.{" "}
+              <Link href="/login" className="font-semibold text-cyan-300 underline">
+                Go to login
+              </Link>
+            </p>
+          )}
         </div>
+
+        {complaintId && (
+          <div className="mt-6 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-6">
+            <h2 className="text-2xl font-bold text-emerald-300">
+              Complaint Created Successfully
+            </h2>
+            <p className="mt-4 text-sm uppercase tracking-wide text-slate-400">
+              Complaint ID
+            </p>
+            <p className="mt-1 text-3xl font-bold text-white">{complaintId}</p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                href={`/track?id=${encodeURIComponent(complaintId)}`}
+                className="rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950"
+              >
+                Track Complaint
+              </Link>
+              <button
+                onClick={resetScan}
+                className="rounded-lg border border-white/10 px-5 py-3 font-semibold text-slate-200 hover:bg-white/5"
+              >
+                Create Another Scan
+              </button>
+            </div>
+          </div>
+        )}
 
         {detection && (
           <div className="mt-6 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-6">
@@ -303,7 +393,7 @@ export default function DetectPage() {
               <Result label="Recommended authority" value={routeAuthority(latitude, longitude)} />
             </div>
             <p className="mt-5 text-sm leading-6 text-slate-300">{detection.reason}</p>
-            <button onClick={createComplaint} disabled={!detection.canCreateComplaint || isCreating} className="mt-6 rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">
+            <button onClick={createComplaint} disabled={!detection.canCreateComplaint || isCreating || Boolean(complaintId)} className="mt-6 rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">
               {isCreating ? "Creating..." : "Create Complaint"}
             </button>
           </div>
