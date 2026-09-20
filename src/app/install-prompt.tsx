@@ -43,7 +43,7 @@ export default function InstallPrompt() {
   }
 
   return (
-    <aside className="fixed bottom-4 left-4 right-4 z-50 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-cyan-300/30 bg-slate-900 p-4 text-white shadow-2xl" aria-label="Install PotholeWatch AI">
+    <aside className="fixed bottom-4 left-3 right-3 z-50 mx-auto flex max-w-md items-center gap-2 rounded-2xl border border-cyan-300/30 bg-slate-900 p-3 text-white shadow-2xl sm:left-4 sm:right-4 sm:gap-3 sm:p-4" aria-label="Install PotholeWatch AI">
       <Download className="h-5 w-5 shrink-0 text-cyan-300" />
       <div className="min-w-0 flex-1">
         <p className="font-semibold">Install PotholeWatch AI</p>

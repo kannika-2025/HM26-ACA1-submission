@@ -5,7 +5,7 @@ export default function Home() {
     <main className="min-h-screen bg-slate-950 text-white">
       {/* HERO */}
       <section className="relative overflow-hidden">
-        <div className="mx-auto max-w-7xl px-6 py-24 md:py-32">
+        <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:py-32">
           <div className="max-w-4xl">
             <div className="mb-6 inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-300">
               Smart civic reporting for Mysuru
@@ -20,24 +20,24 @@ export default function Home() {
               Citizens can report potholes and civic issues with evidence and location. PotholeWatch AI verifies submissions, detects duplicates, routes them to the right authority and keeps progress visible.
             </p>
 
-            <div className="mt-10 flex flex-wrap gap-4">
+            <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
               <Link
                 href="/report"
-                className="rounded-xl bg-blue-600 px-7 py-4 font-bold transition hover:bg-blue-500"
+                className="w-full rounded-xl bg-blue-600 px-5 py-4 text-center font-bold transition hover:bg-blue-500 sm:w-auto sm:px-7"
               >
                 Report an Issue
               </Link>
 
               <Link
                 href="/track"
-                className="rounded-xl border border-white/10 px-7 py-4 font-bold text-slate-200 transition hover:bg-white/5"
+                className="w-full rounded-xl border border-white/10 px-5 py-4 text-center font-bold text-slate-200 transition hover:bg-white/5 sm:w-auto sm:px-7"
               >
                 Track Complaint
               </Link>
-              <Link href="/detect" className="rounded-xl border border-white/10 px-7 py-4 font-bold text-slate-200 transition hover:bg-white/5">
+              <Link href="/detect" className="w-full rounded-xl border border-white/10 px-5 py-4 text-center font-bold text-slate-200 transition hover:bg-white/5 sm:w-auto sm:px-7">
                 AI Civic Scan
               </Link>
-              <Link href="/dashboard" className="rounded-xl border border-white/10 px-7 py-4 font-bold text-slate-200 transition hover:bg-white/5">
+              <Link href="/dashboard" className="w-full rounded-xl border border-white/10 px-5 py-4 text-center font-bold text-slate-200 transition hover:bg-white/5 sm:w-auto sm:px-7">
                 View Public Dashboard
               </Link>
             </div>
@@ -47,7 +47,7 @@ export default function Home() {
 
       {/* FEATURES */}
       <section className="border-t border-white/10 bg-slate-900/40">
-        <div className="mx-auto max-w-7xl px-6 py-20">
+        <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:py-20">
           <div className="mb-12">
             <p className="text-sm font-semibold uppercase tracking-widest text-blue-400">
               How it works
@@ -90,7 +90,7 @@ export default function Home() {
 
       {/* WORKFLOW */}
       <section className="border-t border-white/10">
-        <div className="mx-auto max-w-7xl px-6 py-20">
+        <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:py-20">
           <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
             <div>
               <p className="text-sm font-semibold uppercase tracking-widest text-blue-400">
@@ -136,7 +136,7 @@ export default function Home() {
 
       {/* CTA */}
       <section className="border-t border-white/10 bg-blue-600">
-        <div className="mx-auto max-w-7xl px-6 py-16 text-center">
+        <div className="mx-auto w-full max-w-7xl px-4 py-14 text-center sm:px-6 md:py-16">
           <h2 className="text-3xl font-bold md:text-4xl">
             See a pothole? Report it.
           </h2>
@@ -149,14 +149,14 @@ export default function Home() {
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link
               href="/report"
-              className="rounded-xl bg-white px-7 py-4 font-bold text-blue-700 transition hover:bg-slate-100"
+              className="w-full rounded-xl bg-white px-5 py-4 font-bold text-blue-700 transition hover:bg-slate-100 sm:w-auto sm:px-7"
             >
               Report an Issue
             </Link>
 
             <Link
               href="/track"
-              className="rounded-xl border border-white/30 px-7 py-4 font-bold text-white transition hover:bg-white/10"
+              className="w-full rounded-xl border border-white/30 px-5 py-4 font-bold text-white transition hover:bg-white/10 sm:w-auto sm:px-7"
             >
               Track Complaint
             </Link>

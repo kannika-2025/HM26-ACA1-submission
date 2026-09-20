@@ -21,7 +21,7 @@ export default function SiteHeader() {
         <Link href="/" onClick={() => setOpen(false)} className="text-lg font-bold tracking-tight text-white sm:text-xl">
           PotholeWatch <span className="text-cyan-400">AI</span>
         </Link>
-        <nav className="hidden items-center gap-5 lg:flex" aria-label="Primary navigation">
+        <nav className="hidden items-center gap-5 md:flex" aria-label="Primary navigation">
           {links.slice(0, -1).map((link) => (
             <Link key={link.href} href={link.href} className="text-sm font-semibold text-slate-300 transition hover:text-cyan-300">
               {link.label}
@@ -34,12 +34,12 @@ export default function SiteHeader() {
             Login / Register
           </Link>
         </nav>
-        <button type="button" aria-label={open ? "Close navigation" : "Open navigation"} onClick={() => setOpen(!open)} className="rounded-lg border border-white/10 p-2 text-slate-200 lg:hidden">
+        <button type="button" aria-label={open ? "Close navigation" : "Open navigation"} onClick={() => setOpen(!open)} className="rounded-lg border border-white/10 p-2 text-slate-200 md:hidden">
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
       {open && (
-        <nav className="border-t border-white/10 px-4 py-3 lg:hidden" aria-label="Mobile navigation">
+        <nav className="border-t border-white/10 px-4 py-3 md:hidden" aria-label="Mobile navigation">
           {links.map((link) => (
             <Link key={link.href} href={link.href} onClick={() => setOpen(false)} className="block rounded-lg px-3 py-3 text-sm font-semibold text-slate-200 hover:bg-white/5">
               {link.label}

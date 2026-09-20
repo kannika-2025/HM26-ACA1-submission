@@ -155,7 +155,7 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <section className="mx-auto max-w-6xl px-6 py-12">
+      <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
         <div className="mb-10">
           <p className="text-sm font-semibold uppercase tracking-widest text-cyan-400">
             Public overview

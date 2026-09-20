@@ -518,7 +518,7 @@ export default function DetectPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <section className="mx-auto max-w-4xl px-6 py-12">
+      <section className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
         <p className="text-sm font-semibold uppercase tracking-widest text-cyan-400">AI Civic Scan</p>
         <h1 className="mt-3 text-4xl font-bold sm:text-5xl">Check an image for civic issues</h1>
         <p className="mt-4 max-w-2xl text-slate-400">Upload or capture evidence. AI results are suggestions and should be reviewed by a person.</p>
@@ -536,11 +536,11 @@ export default function DetectPage() {
             <img src={previewUrl} alt="Selected civic evidence" className="mt-6 max-h-96 w-full rounded-xl object-contain" />
           )}
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button onClick={analyzeImage} disabled={!image || isAnalyzing} className="rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <button onClick={analyzeImage} disabled={!image || isAnalyzing} className="w-full rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
               {isAnalyzing ? "Analyzing..." : "Analyze Image"}
             </button>
-            <button onClick={captureLocation} className="rounded-lg border border-white/10 px-5 py-3 font-semibold text-slate-200 hover:bg-white/5">
+            <button onClick={captureLocation} className="w-full rounded-lg border border-white/10 px-5 py-3 font-semibold text-slate-200 hover:bg-white/5 sm:w-auto">
               Capture GPS
             </button>
           </div>
