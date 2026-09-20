@@ -90,6 +90,9 @@ export default function ReportPage() {
   const [verificationMessage, setVerificationMessage] =
     useState("");
 
+  const [manualReview, setManualReview] =
+    useState(false);
+
   const [detectedIssue, setDetectedIssue] =
     useState("Unknown");
 
@@ -306,6 +309,7 @@ export default function ReportPage() {
     // New evidence means old verification is invalid.
     setVerificationStatus("idle");
     setVerificationMessage("");
+    setManualReview(false);
     setDetectedIssue("Unknown");
     setDetectionConfidence(0);
     setVerificationModel("");
@@ -364,6 +368,7 @@ export default function ReportPage() {
 
         setVerificationStatus("idle");
         setVerificationMessage("");
+        setManualReview(false);
         setDetectedIssue("Unknown");
         setDetectionConfidence(0);
         setVerificationModel("");
@@ -590,6 +595,8 @@ export default function ReportPage() {
       "checking"
     );
 
+    setManualReview(false);
+
     setVerificationMessage(
       "Gemini AI is analyzing the image..."
     );
@@ -597,6 +604,8 @@ export default function ReportPage() {
     setDetectedIssue("Unknown");
     setDetectionConfidence(0);
     setVerificationModel("");
+
+    let nonAvailabilityResponseError = false;
 
     try {
       const imageFile =
@@ -626,6 +635,25 @@ export default function ReportPage() {
         await response.json();
 
       if (!response.ok) {
+        const availabilityFailure = [
+          "quota_or_rate_limit",
+          "gemini_service_unavailable",
+          "network_error",
+          "model_not_found",
+        ].includes(data?.category);
+
+        if (availabilityFailure) {
+          setDetectedIssue("Needs manual review");
+          setDetectionConfidence(0);
+          setManualReview(true);
+          setVerificationStatus("review");
+          setVerificationMessage(
+            "AI verification temporarily unavailable. Evidence will require manual review."
+          );
+          return;
+        }
+
+        nonAvailabilityResponseError = true;
         throw new Error(
           data?.error ||
             "Gemini verification failed."
@@ -664,6 +692,8 @@ export default function ReportPage() {
           "verified"
         );
 
+        setManualReview(false);
+
         setVerificationMessage(
           data.reason ||
             `Gemini verified ${issue} with ${confidence}% confidence.`
@@ -688,11 +718,21 @@ export default function ReportPage() {
         "review"
       );
 
-      setVerificationMessage(
-        error instanceof Error
-          ? error.message
-          : "Gemini verification failed. Please try again."
-      );
+      if (nonAvailabilityResponseError) {
+        setManualReview(false);
+        setVerificationMessage(
+          error instanceof Error
+            ? error.message
+            : "Gemini verification failed. Please try again."
+        );
+      } else {
+        setManualReview(true);
+        setDetectedIssue("Needs manual review");
+        setDetectionConfidence(0);
+        setVerificationMessage(
+          "AI verification temporarily unavailable. Evidence will require manual review."
+        );
+      }
     }
   }
 
@@ -773,8 +813,8 @@ export default function ReportPage() {
     }
 
     if (
-      verificationStatus !==
-      "verified"
+      verificationStatus !== "verified" &&
+      !manualReview
     ) {
       alert(
         "Please complete Gemini evidence verification before submitting."
@@ -852,7 +892,7 @@ export default function ReportPage() {
       evidence: photo ? "Photo" : "Video",
 
       verification: {
-        status: "VERIFIED",
+        status: manualReview ? "Needs Review" : "VERIFIED",
 
         detectedIssue,
 
@@ -884,7 +924,9 @@ export default function ReportPage() {
 
       assignedAuthority: authority.name,
 
-      department: getDepartment(issueType),
+      department: manualReview
+        ? "Human Review"
+        : getDepartment(issueType),
 
       statusHistory: [
         {
@@ -940,7 +982,7 @@ export default function ReportPage() {
           duplicate_check: duplicateCheck,
           location_check: "Location verified",
           assigned_authority: complaint.authority.name,
-          department: getDepartment(complaint.issue),
+          department: complaint.department,
           current_status: "Submitted",
           last_updated: currentTime,
           created_at: currentTime,
@@ -1027,6 +1069,8 @@ export default function ReportPage() {
     setVerificationStatus(
       "idle"
     );
+
+    setManualReview(false);
 
     setVerificationMessage("");
 
@@ -1673,8 +1717,8 @@ export default function ReportPage() {
                 type="button"
                 onClick={submitComplaint}
                 disabled={
-                  verificationStatus !==
-                    "verified" ||
+                  (verificationStatus !== "verified" &&
+                    !manualReview) ||
                   latitude === null ||
                   !authority
                 }
