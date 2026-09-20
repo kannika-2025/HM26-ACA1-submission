@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 
-// Supported multimodal Gemini models. Keep a fallback for quota or transient
-// availability problems without exposing the API key to the client.
-const MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-];
+// Live Gemini API catalog model with generateContent and image-input support.
+const MODELS = ["gemini-flash-latest"];
 
 const ALLOWED_ISSUES = [
   "Pothole",
