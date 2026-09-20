@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 const OFFICE_HEAD_EMAIL = "potholewatch.officehead@gmail.com";
 
@@ -15,53 +16,101 @@ export default function LoginPage() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const isOfficeHead =
     email.trim().toLowerCase() === OFFICE_HEAD_EMAIL;
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
+    setLoading(true);
 
     const cleanEmail = email.trim().toLowerCase();
 
-    if (!cleanEmail) {
-      setError("Please enter your email.");
-      return;
-    }
+    try {
+      if (!cleanEmail) {
+        setError("Please enter your email.");
+        return;
+      }
 
-    if (!phone.trim() && !isOfficeHead) {
-      setError("Please enter your phone number.");
-      return;
-    }
+      // OFFICE HEAD LOGIN
+      if (isOfficeHead) {
+        if (!password.trim()) {
+          setError("Please enter the Office Head password.");
+          return;
+        }
 
-    if (isOfficeHead && !password.trim()) {
-      setError("Please enter the Office Head password.");
-      return;
-    }
+        const { error: authError } =
+          await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password,
+          });
 
-    if (mode === "register" && !name.trim()) {
-      setError("Please enter your name.");
-      return;
-    }
+        if (authError) {
+          setError(authError.message);
+          return;
+        }
 
-    const user = {
-      name: isOfficeHead ? "Office Head" : name.trim() || "Citizen",
-      email: cleanEmail,
-      phone: phone.trim() || "Not provided",
-      role: isOfficeHead ? "office_head" : "citizen",
-    };
+        const user = {
+          name: "Office Head",
+          email: cleanEmail,
+          phone: phone.trim() || "Not provided",
+          role: "office_head",
+        };
 
-    localStorage.setItem("potholewatch_logged_in", "true");
-    localStorage.setItem(
-      "potholewatch_current_user",
-      JSON.stringify(user)
-    );
+        localStorage.setItem(
+          "potholewatch_logged_in",
+          "true"
+        );
 
-    if (isOfficeHead) {
-      router.push("/dashboard");
-    } else {
+        localStorage.setItem(
+          "potholewatch_current_user",
+          JSON.stringify(user)
+        );
+
+        router.push("/dashboard");
+        return;
+      }
+
+      // CITIZEN LOGIN
+      // Make sure an old Office Head Supabase session
+      // is not reused by a citizen.
+      await supabase.auth.signOut();
+
+      if (!phone.trim()) {
+        setError("Please enter your phone number.");
+        return;
+      }
+
+      if (mode === "register" && !name.trim()) {
+        setError("Please enter your name.");
+        return;
+      }
+
+      const user = {
+        name: name.trim() || "Citizen",
+        email: cleanEmail,
+        phone: phone.trim(),
+        role: "citizen",
+      };
+
+      localStorage.setItem(
+        "potholewatch_logged_in",
+        "true"
+      );
+
+      localStorage.setItem(
+        "potholewatch_current_user",
+        JSON.stringify(user)
+      );
+
       router.push("/report");
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -119,7 +168,10 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-4"
+          >
 
             {/* Name */}
             {mode === "register" && (
@@ -131,7 +183,9 @@ export default function LoginPage() {
                 <input
                   type="text"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) =>
+                    setName(e.target.value)
+                  }
                   placeholder="Enter your name"
                   className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-700"
                 />
@@ -147,13 +201,15 @@ export default function LoginPage() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) =>
+                  setEmail(e.target.value)
+                }
                 placeholder="Enter your email"
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-700"
               />
             </div>
 
-            {/* Office Head indicator */}
+            {/* Office Head */}
             {isOfficeHead && (
               <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
                 <p className="text-sm font-semibold text-blue-800">
@@ -176,7 +232,9 @@ export default function LoginPage() {
                 <input
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) =>
+                    setPassword(e.target.value)
+                  }
                   placeholder="Enter Office Head password"
                   className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-700"
                 />
@@ -192,7 +250,9 @@ export default function LoginPage() {
               <input
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) =>
+                  setPhone(e.target.value)
+                }
                 placeholder="Enter phone number"
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-700"
               />
@@ -208,9 +268,12 @@ export default function LoginPage() {
             {/* Submit */}
             <button
               type="submit"
-              className="w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-800"
+              disabled={loading}
+              className="w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
-              {isOfficeHead
+              {loading
+                ? "Signing in..."
+                : isOfficeHead
                 ? "Login as Office Head"
                 : mode === "login"
                 ? "Login"
