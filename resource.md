@@ -4,13 +4,12 @@
 https://potholewatch-ai-2026.vercel.app/
 
 ## 10-Minute Video Walkthrough
-[PASTE GOOGLE DRIVE VIDEO LINK HERE]
+https://drive.google.com/file/d/1KM7V2Hh5YQ3gk3R44TRrNZsO3xLwzQfg/view?usp=drivesdk
 
 ## Presentation Deck
-[PASTE PRESENTATION PDF LINK HERE]
+https://canva.link/7j9vzovdf2aucgu
 
-## Decision Log
-[PASTE DECISION LOG PDF LINK HERE]
+
 
 ## GitHub Repository
 https://github.com/kannika-2025/HM26-ACA1-submission
