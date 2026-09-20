@@ -167,13 +167,56 @@ export default function DetectPage() {
   }
 
   async function createComplaint() {
-    if (!detection?.canCreateComplaint || detection.issue === "Unknown") {
-      setMessage("Needs human review before a complaint can be created.");
+    console.log("AI Civic Scan: Create Complaint clicked", {
+      detection,
+      isLoggedIn,
+      hasUserName: Boolean(user.name),
+      latitude,
+      longitude,
+      isCreating,
+    });
+
+    if (!detection) {
+      console.error("AI Civic Scan validation failed: no detection result");
+      setMessage("Cannot create complaint: AI detection result is missing.");
+      return;
+    }
+
+    if (!detection.issue || detection.issue === "Unknown") {
+      console.error("AI Civic Scan validation failed: issue is missing", detection);
+      setMessage("Cannot create complaint: no supported civic issue was detected.");
+      return;
+    }
+
+    if (!detection.canCreateComplaint) {
+      console.error(
+        "AI Civic Scan validation failed: verification is not sufficient",
+        detection
+      );
+      setMessage(
+        `Cannot create complaint: verification status is ${detection.evidenceStatus || "Needs Review"} with ${detection.confidence ?? 0}% confidence.`
+      );
       return;
     }
 
     if (!isLoggedIn || !user.name) {
+      console.error("AI Civic Scan validation failed: user is not logged in");
       setMessage("Please register or login first to create a complaint.");
+      return;
+    }
+
+    if (!Number.isFinite(detection.confidence) || detection.confidence < 70) {
+      console.error("AI Civic Scan validation failed: confidence is too low", detection);
+      setMessage(
+        `Cannot create complaint: AI confidence is ${detection.confidence ?? 0}%, but at least 70% is required.`
+      );
+      return;
+    }
+
+    const department = departmentMap[detection.issue];
+    if (!department) {
+      console.error("AI Civic Scan validation failed: department is missing", detection);
+      setMessage("Cannot create complaint: no department could be assigned.");
       return;
     }
 
@@ -193,7 +236,6 @@ export default function DetectPage() {
         complaintLatitude,
         complaintLongitude
       );
-      const department = departmentMap[detection.issue] || "Road & Infrastructure";
       const location =
         complaintLatitude !== null && complaintLongitude !== null
           ? `GPS: ${complaintLatitude.toFixed(6)}, ${complaintLongitude.toFixed(6)}`
@@ -270,14 +312,31 @@ export default function DetectPage() {
         lastUpdated: now,
         createdAt: now,
       };
-      localStorage.setItem(`complaint_${id}`, JSON.stringify(localComplaint));
-      localStorage.setItem("latest_complaint_id", id);
+      try {
+        localStorage.setItem(`complaint_${id}`, JSON.stringify(localComplaint));
+        localStorage.setItem("latest_complaint_id", id);
+        const existingIds = JSON.parse(
+          localStorage.getItem("potholewatch_user_complaints") || "[]"
+        );
+        const ids = Array.isArray(existingIds) ? existingIds : [];
+        ids.push(id);
+        localStorage.setItem("potholewatch_user_complaints", JSON.stringify(ids));
+        console.log("AI Civic Scan: localStorage save succeeded", { id });
+      } catch (error) {
+        console.error("AI Civic Scan localStorage save failed:", error);
+        throw new Error("Complaint could not be saved on this device.");
+      }
       setComplaintId(id);
       setMessage(
         syncWarning
-          ? `Complaint Created Successfully. ${syncWarning} Saved locally as a fallback.`
+          ? `Complaint saved locally. ${syncWarning} Saved locally as a fallback.`
           : "Complaint Created Successfully"
       );
+      console.log("AI Civic Scan: complaint creation completed", {
+        id,
+        supabaseSynced: !syncWarning,
+        localStorageSaved: true,
+      });
     } catch (error) {
       console.error("Detection complaint creation failed:", error);
       setMessage(
@@ -393,7 +452,7 @@ export default function DetectPage() {
               <Result label="Recommended authority" value={routeAuthority(latitude, longitude)} />
             </div>
             <p className="mt-5 text-sm leading-6 text-slate-300">{detection.reason}</p>
-            <button onClick={createComplaint} disabled={!detection.canCreateComplaint || isCreating || Boolean(complaintId)} className="mt-6 rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">
+            <button onClick={createComplaint} disabled={isCreating || Boolean(complaintId)} className="mt-6 rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">
               {isCreating ? "Creating..." : "Create Complaint"}
             </button>
           </div>

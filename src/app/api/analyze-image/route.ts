@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 
-// Stable Gemini models.
-// We try the newest model first, then fall back if it is temporarily unavailable.
+// Supported multimodal Gemini models. Keep a fallback for quota or transient
+// availability problems without exposing the API key to the client.
 const MODELS = [
-  "gemini-3.8-flash",
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
 ];
 
 const ALLOWED_ISSUES = [
@@ -75,6 +74,41 @@ If no supported civic problem is clearly visible:
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getGeminiErrorCategory(status: number) {
+  if (status === 400) {
+    return "invalid_request";
+  }
+
+  if (status === 401 || status === 403) {
+    return "authentication_or_permission";
+  }
+
+  if (status === 404) {
+    return "model_not_found";
+  }
+
+  if (status === 429) {
+    return "quota_or_rate_limit";
+  }
+
+  if (status >= 500) {
+    return "gemini_service_unavailable";
+  }
+
+  return "gemini_request_failed";
+}
+
+function getSafeErrorDetail(responseText: string) {
+  try {
+    const parsed = JSON.parse(responseText);
+    return typeof parsed?.error?.message === "string"
+      ? parsed.error.message.slice(0, 300)
+      : "Gemini returned an error response.";
+  } catch {
+    return responseText.slice(0, 300) || "Gemini returned an empty error response.";
+  }
 }
 
 async function callGemini(
@@ -197,6 +231,7 @@ export async function POST(request: Request) {
     const base64Image = Buffer.from(bytes).toString("base64");
 
     let lastError = "";
+    let lastErrorCategory = "gemini_request_failed";
 
     // ---------------------------------------------------------
     // 6. Try Gemini models
@@ -320,15 +355,18 @@ export async function POST(request: Request) {
           // Gemini returned an error
           // ---------------------------------------------------
 
-          lastError = `${model}: HTTP ${response.status} - ${responseText.slice(
-            0,
-            500
-          )}`;
+          lastErrorCategory = getGeminiErrorCategory(response.status);
+          const safeErrorDetail = getSafeErrorDetail(responseText);
+          lastError = `${model}: HTTP ${response.status} - ${safeErrorDetail}`;
 
           console.error(
-            `Gemini error using ${model}:`,
-            response.status,
-            responseText
+            "Gemini API error:",
+            {
+              model,
+              status: response.status,
+              category: lastErrorCategory,
+              detail: safeErrorDetail,
+            }
           );
 
           // ---------------------------------------------------
@@ -357,10 +395,15 @@ export async function POST(request: Request) {
             error instanceof Error
               ? error.message
               : "Unknown network error";
+          lastErrorCategory = "network_error";
 
           console.error(
-            `Gemini request failed using ${model}:`,
-            error
+            "Gemini request failed:",
+            {
+              model,
+              category: lastErrorCategory,
+              detail: lastError,
+            }
           );
 
           // Retry network errors
@@ -376,14 +419,18 @@ export async function POST(request: Request) {
     // 7. All Gemini models failed
     // ---------------------------------------------------------
 
-    console.error(
-      "All Gemini attempts failed:",
-      lastError
-    );
+    console.error("All Gemini attempts failed:", {
+      category: lastErrorCategory,
+      detail: lastError,
+    });
 
     return NextResponse.json(
       {
-        error: "Gemini is temporarily unavailable.",
+        error: `Gemini analysis failed: ${lastErrorCategory.replaceAll(
+          "_",
+          " "
+        )}.`,
+        category: lastErrorCategory,
         details: lastError,
       },
       {
