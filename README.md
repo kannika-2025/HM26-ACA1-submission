@@ -1,36 +1,115 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PotholeWatch AI
 
-## Getting Started
+## Problem
+Cities often receive noisy, duplicate, or poorly documented civic complaints. Residents struggle to report road damage clearly, and local authorities receive incomplete information that slows resolution. In many cases, the same issue is reported multiple times without useful verification or tracking.
 
-First, run the development server:
+## Solution
+PotholeWatch AI is a smart civic complaint platform built for Mysuru that lets citizens report problems with a photo, GPS location, and issue details. The app uses AI to verify whether the uploaded image clearly shows a civic issue, checks the location for validity, detects duplicates, and routes complaints to the right authority or department.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Users can track status updates and view a public dashboard showing civic issue visibility and reporting activity.
+
+## Why it matters
+This solution brings transparency, accountability, and efficiency to civic issue management. It reduces duplicate reporting, improves complaint quality, helps city departments prioritize real issues faster, and gives citizens a clearer way to track the status of their complaint.
+
+## Key features
+- AI-based image verification for civic issues
+- GPS and location validation for Mysuru service area
+- Duplicate detection before complaint creation
+- Department or authority routing suggestions
+- Complaint tracking by ID
+- Public dashboard for transparency
+- Mobile-friendly PWA-style experience
+
+## Supported issue types
+The system is designed to detect and handle civic problems such as:
+- Pothole
+- Road Damage
+- Open Manhole
+- Broken Streetlight
+- Water Leakage
+- Overflowing Garbage Bin
+- Waste Dumping
+- Unsegregated Waste
+
+## How it works
+1. User uploads a photo of the civic issue.
+2. The app captures or validates the user's location.
+3. AI analyzes the image to determine whether the issue is clearly visible.
+4. The app checks whether the report is a duplicate or likely repeat case.
+5. The complaint is created with a status, routing logic, and evidence.
+6. The user can track the complaint and view the public dashboard.
+
+## Tech stack
+- Next.js 14
+- React + TypeScript
+- Tailwind CSS
+- Supabase
+- Google Gemini API
+- Hugging Face Inference
+
+## Project structure
+```text
+src/
+  app/
+    api/
+      analyze-image/route.ts
+      verify/route.ts
+    dashboard/page.tsx
+    detect/page.tsx
+    login/page.tsx
+    report/page.tsx
+    track/page.tsx
+    page.tsx
+    layout.tsx
+    manifest.webmanifest
+  lib/
+    location.ts
+    supabase.ts
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## AI model workflow
+This project uses multiple AI layers for better civic validation:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Gemini checks whether the uploaded image clearly shows a supported civic issue and returns structured evidence.
+- A second pothole-specific vision model performs additional validation for road damage classification.
+- The app does not blindly trust the image; it requires clear evidence and flags weak or ambiguous inputs for review.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment setup
+Create a `.env.local` file in the project root:
 
-## Learn More
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+GEMINI_API_KEY=your_google_generative_ai_key
+HF_TOKEN=your_huggingface_token
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Run locally
+```bash
+npm install
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open:
+```text
+http://localhost:3000
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Build for production
+```bash
+npm run build
+npm run start
+```
 
-## Deploy on Vercel
+## Impact and value
+PotholeWatch AI turns civic reporting from a vague, fragmented process into a structured digital workflow. It helps citizens report better, helps authorities act faster, and increases transparency for the community.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Future scope
+- real authority dashboards and admin panels
+- automated escalation workflows
+- live map-based issue visualization
+- multilingual citizen support
+- integration with government service APIs
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Conclusion
+PotholeWatch AI is a practical MVP for smart-city civic reporting. It combines AI, geolocation, duplicate detection, and transparent tracking to improve how urban issues are submitted and resolved.
