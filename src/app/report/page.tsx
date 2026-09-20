@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 type VerificationStatus =
@@ -42,8 +41,6 @@ const SEVERITIES = [
 ];
 
 export default function ReportPage() {
-  const router = useRouter();
-
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const mediaRecorderRef =
@@ -115,43 +112,29 @@ export default function ReportPage() {
     useState(true);
 
   // ---------------------------------------------------------
-  // LOGIN CHECK + LOAD USER
+  // Load optional registered-user details without gating public reporting.
   // ---------------------------------------------------------
 
   useEffect(() => {
-    const loggedIn =
-      localStorage.getItem(
-        "potholewatch_logged_in"
-      );
-
     const storedUser =
       localStorage.getItem(
         "potholewatch_current_user"
       );
 
-    if (loggedIn !== "true" || !storedUser) {
-      router.replace("/login");
-      return;
-    }
+    if (storedUser) {
+      try {
+        const user: User = JSON.parse(storedUser);
 
-    try {
-      const user: User = JSON.parse(storedUser);
-
-      setName(user.name || "");
-      setEmail(user.email || "");
-      setPhone(user.phone || "");
-    } catch (error) {
-      console.error(
-        "Unable to load logged-in user:",
-        error
-      );
-
-      router.replace("/login");
-      return;
+        setName(user.name || "");
+        setEmail(user.email || "");
+        setPhone(user.phone || "");
+      } catch (error) {
+        console.error("Unable to load saved user details:", error);
+      }
     }
 
     setIsLoadingUser(false);
-  }, [router]);
+  }, []);
 
   // ---------------------------------------------------------
   // CAMERA STREAM
