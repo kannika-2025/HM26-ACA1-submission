@@ -4,7 +4,7 @@
 
 PotholeWatch AI is a Mysuru-focused civic complaint management MVP that helps citizens report potholes and other civic issues with evidence and location, while giving authorities a structured workflow to review, route, track, and resolve complaints.
 
-## 🚀 Live MVP
+##  Live MVP
 
 **Live application:**  
 https://potholewatch-ai-2026.vercel.app/
@@ -14,7 +14,7 @@ https://github.com/kannika-2025/HM26-ACA1-submission
 
 ---
 
-## 🏙️ Problem
+##  Problem
 
 Civic complaints can be difficult to manage when reports are incomplete, duplicated, poorly documented, or sent to the wrong authority.
 
@@ -37,7 +37,7 @@ Authorities need a structured way to:
 
 ---
 
-## 💡 Solution
+##  Solution
 
 PotholeWatch AI provides an end-to-end civic complaint workflow:
 
@@ -55,7 +55,7 @@ Citizens can track their complaints and view public complaint statistics through
 
 ---
 
-## ✨ Key Features
+##  Key Features
 
 ### 1. Citizen Complaint Reporting
 
@@ -115,7 +115,7 @@ Citizens can access the reporting workflow from a phone and use device camera/lo
 
 ---
 
-## 🧩 Supported Civic Issues
+##  Supported Civic Issues
 
 The reporting workflow is designed to support issues such as:
 
@@ -130,7 +130,7 @@ The reporting workflow is designed to support issues such as:
 
 ---
 
-## 🔄 Application Workflow
+##  Application Workflow
 
 ```text
 Citizen
