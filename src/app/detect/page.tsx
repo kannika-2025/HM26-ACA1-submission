@@ -31,7 +31,42 @@ const departmentMap: Record<string, string> = {
   "Broken Streetlight": "Electrical / Street Lighting",
   "Water Leakage": "Water Supply",
   "Needs manual review": "Human Review",
+  Unknown: "Human Review",
 };
+
+type DuplicateMatch = {
+  kind: "Duplicate" | "Potential Duplicate";
+  complaintId: string;
+  status: string;
+};
+
+function parseCoordinates(value: unknown) {
+  if (typeof value !== "string") return null;
+  const match = value.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const latitude = Number(match[1]);
+  const longitude = Number(match[2]);
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? { latitude, longitude }
+    : null;
+}
+
+function validCoordinates(latitude: number | null, longitude: number | null) {
+  return latitude !== null && longitude !== null && Number.isFinite(latitude) && Number.isFinite(longitude) && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+}
+
+function distanceInMeters(first: { latitude: number; longitude: number }, second: { latitude: number; longitude: number }) {
+  const latitudeDelta = (second.latitude - first.latitude) * 111320;
+  const longitudeDelta = (second.longitude - first.longitude) * 111320 * Math.cos((first.latitude * Math.PI) / 180);
+  return Math.sqrt(latitudeDelta ** 2 + longitudeDelta ** 2);
+}
+
+function displayStatus(value: unknown) {
+  const status = String(value || "Submitted");
+  if (["WORK STARTED", "ASSIGNED", "ACKNOWLEDGED", "In Progress"].includes(status)) return "In Progress";
+  if (["RESOLVED", "CLOSED", "Fixed"].includes(status)) return "Fixed";
+  return "Submitted";
+}
 
 export default function DetectPage() {
   const [image, setImage] = useState<File | null>(null);
@@ -45,6 +80,7 @@ export default function DetectPage() {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [user, setUser] = useState<User>({});
+  const [duplicateMatch, setDuplicateMatch] = useState<DuplicateMatch | null>(null);
 
   useEffect(() => {
     setIsLoggedIn(
@@ -69,6 +105,7 @@ export default function DetectPage() {
     setImage(file);
     setPreviewUrl(URL.createObjectURL(file));
     setDetection(null);
+    setDuplicateMatch(null);
     setMessage("");
   }
 
@@ -184,7 +221,7 @@ export default function DetectPage() {
     return "Gram Panchayat";
   }
 
-  async function createComplaint() {
+  async function createComplaint(ignoreDuplicate = false) {
     console.log("AI Civic Scan: Create Complaint clicked", {
       detection,
       isLoggedIn,
@@ -200,40 +237,15 @@ export default function DetectPage() {
       return;
     }
 
-    if (
-      !detection.issue ||
-      (detection.issue === "Unknown" && !detection.manualReview)
-    ) {
+    if (!detection.issue) {
       console.error("AI Civic Scan validation failed: issue is missing", detection);
-      setMessage("Cannot create complaint: no supported civic issue was detected.");
-      return;
-    }
-
-    if (!detection.manualReview && !detection.canCreateComplaint) {
-      console.error(
-        "AI Civic Scan validation failed: verification is not sufficient",
-        detection
-      );
-      setMessage(
-        `Cannot create complaint: verification status is ${detection.evidenceStatus || "Needs Review"} with ${detection.confidence ?? 0}% confidence.`
-      );
+      setMessage("Cannot create complaint: the scan result is missing an issue type.");
       return;
     }
 
     if (!isLoggedIn || !user.name) {
       console.error("AI Civic Scan validation failed: user is not logged in");
       setMessage("Please register or login first to create a complaint.");
-      return;
-    }
-
-    if (
-      !detection.manualReview &&
-      (!Number.isFinite(detection.confidence) || detection.confidence < 70)
-    ) {
-      console.error("AI Civic Scan validation failed: confidence is too low", detection);
-      setMessage(
-        `Cannot create complaint: AI confidence is ${detection.confidence ?? 0}%, but at least 70% is required.`
-      );
       return;
     }
 
@@ -254,6 +266,90 @@ export default function DetectPage() {
           : await requestLocation();
       const complaintLatitude = locationResult?.latitude ?? null;
       const complaintLongitude = locationResult?.longitude ?? null;
+      const newCoordinates = validCoordinates(complaintLatitude, complaintLongitude)
+        ? { latitude: complaintLatitude as number, longitude: complaintLongitude as number }
+        : null;
+      const evidenceHash = image
+        ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await image.arrayBuffer())))
+            .map((byte) => byte.toString(16).padStart(2, "0"))
+            .join("")
+        : null;
+
+      console.info("Duplicate detection: new complaint input", {
+        issueType: detection.issue,
+        coordinates: newCoordinates,
+        evidenceHash,
+      });
+
+      if (isSupabaseConfigured && !ignoreDuplicate) {
+        const { data: existingComplaints, error: duplicateQueryError } = await supabase
+          .from("complaints")
+          .select("*")
+          .eq("issue", detection.issue);
+
+        console.info("Duplicate detection: Supabase SELECT result", {
+          success: !duplicateQueryError,
+          rowCount: existingComplaints?.length ?? 0,
+          error: duplicateQueryError?.message || null,
+        });
+
+        if (duplicateQueryError) {
+          console.error("Duplicate detection: Supabase SELECT failed", duplicateQueryError);
+          setMessage(`Unable to check for duplicate complaints: ${duplicateQueryError.message}`);
+          return;
+        }
+
+        for (const existing of existingComplaints || []) {
+          const existingCoordinates = validCoordinates(
+            typeof existing.latitude === "number" ? existing.latitude : null,
+            typeof existing.longitude === "number" ? existing.longitude : null
+          )
+            ? { latitude: existing.latitude as number, longitude: existing.longitude as number }
+            : parseCoordinates(existing.coordinates);
+          const evidenceText = typeof existing.evidence === "string" ? existing.evidence : "";
+          const storedEvidenceHash = evidenceText.match(/evidence_hash:([a-f0-9]{64})/i)?.[1] || null;
+          const existingHash = typeof existing.evidence_hash === "string"
+            ? existing.evidence_hash
+            : storedEvidenceHash;
+          const nearby = newCoordinates && existingCoordinates
+            ? distanceInMeters(newCoordinates, existingCoordinates) <= 100
+            : false;
+          const sameImage = Boolean(evidenceHash && existingHash && evidenceHash === existingHash);
+
+          console.info("Duplicate detection: existing complaint candidate", {
+            complaintId: existing.id,
+            coordinates: existingCoordinates,
+            evidenceHash: existingHash,
+            issueType: existing.issue,
+            nearby,
+            sameImage,
+          });
+
+          if ((sameImage && nearby) || (sameImage && !newCoordinates && !existingCoordinates)) {
+            setDuplicateMatch({
+              kind: "Duplicate",
+              complaintId: String(existing.id),
+              status: displayStatus(existing.current_status || existing.status),
+            });
+            console.info("Duplicate detection: match found", { kind: "Duplicate", complaintId: existing.id });
+            setMessage("Similar complaint already exists. Review it before creating another complaint.");
+            return;
+          }
+
+          if (nearby) {
+            setDuplicateMatch({
+              kind: "Potential Duplicate",
+              complaintId: String(existing.id),
+              status: displayStatus(existing.current_status || existing.status),
+            });
+            console.info("Duplicate detection: match found", { kind: "Potential Duplicate", complaintId: existing.id });
+            setMessage("Similar complaint already exists. Review it before creating another complaint.");
+            return;
+          }
+        }
+        console.info("Duplicate detection: no match found before INSERT");
+      }
+
       const id = `PW-MYS-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
       const now = new Date().toISOString();
       const authority = routeAuthority(
@@ -279,14 +375,14 @@ export default function DetectPage() {
             : "Location unavailable",
         severity: "Major",
         description: detection.reason,
-        evidence: "Photo captured or uploaded",
-        verification_status: detection.manualReview
+        evidence: evidenceHash
+          ? `Photo captured or uploaded; evidence_hash:${evidenceHash}`
+          : "Photo captured or uploaded",
+        verification_status: detection.manualReview || !newCoordinates || detection.evidenceStatus !== "VERIFIED"
           ? "Needs Review"
-          : complaintLatitude === null
-            ? "Needs Review"
-            : "VERIFIED",
+          : "VERIFIED",
         verification_confidence: String(detection.confidence),
-        duplicate_check: "Not checked",
+        duplicate_check: duplicateMatch ? `${duplicateMatch.kind}: ${duplicateMatch.complaintId}` : "No duplicate detected",
         location_check:
           complaintLatitude === null ? "Location unavailable" : "Location captured",
         assigned_authority: authority,
@@ -296,11 +392,38 @@ export default function DetectPage() {
         created_at: now,
       };
 
+      let hasEvidenceHashColumn = false;
+      let schemaColumns = new Set<string>();
+      if (isSupabaseConfigured) {
+        const { data: schemaSample, error: schemaError } = await supabase
+          .from("complaints")
+          .select("*")
+          .limit(1);
+        if (schemaError) {
+          console.error("Duplicate detection: schema capability query failed", schemaError);
+          setMessage(`Unable to confirm complaint storage fields: ${schemaError.message}`);
+          return;
+        }
+        schemaColumns = new Set(Object.keys(schemaSample?.[0] || {}));
+        hasEvidenceHashColumn = schemaColumns.has("evidence_hash");
+      }
+      const insertRow = {
+        ...row,
+        ...(hasEvidenceHashColumn ? { evidence_hash: evidenceHash } : {}),
+        ...(schemaColumns.has("verification_reason") ? { verification_reason: detection.reason } : {}),
+        ...(schemaColumns.has("duplicate_of") && duplicateMatch ? { duplicate_of: duplicateMatch.complaintId } : {}),
+      };
+      console.info("Duplicate detection: schema capability", {
+        hasEvidenceHashColumn,
+        hashStoredInEvidenceText: Boolean(evidenceHash),
+      });
+
       let syncWarning = "";
 
       if (isSupabaseConfigured) {
         try {
-          const { error } = await supabase.from("complaints").insert(row);
+          console.info("Duplicate detection: INSERT after preflight", { id, evidenceHash, coordinates: newCoordinates });
+          const { error } = await supabase.from("complaints").insert(insertRow);
           if (error) {
             console.error("Supabase detection complaint insert failed:", error);
             syncWarning = `Online sync failed: ${error.message}`;
@@ -332,6 +455,8 @@ export default function DetectPage() {
           confidence: row.verification_confidence,
           duplicateCheck: row.duplicate_check,
           locationCheck: row.location_check,
+          reason: detection.reason,
+          evidenceHash,
         },
         assignedAuthority: authority,
         department,
@@ -486,7 +611,32 @@ export default function DetectPage() {
               <Result label="Recommended authority" value={routeAuthority(latitude, longitude)} />
             </div>
             <p className="mt-5 text-sm leading-6 text-slate-300">{detection.reason}</p>
-            <button onClick={createComplaint} disabled={isCreating || Boolean(complaintId)} className="mt-6 rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">
+            {duplicateMatch && !complaintId && (
+              <div className="mt-5 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+                <p className="font-semibold">Similar complaint already exists</p>
+                <p className="mt-2">Existing Complaint ID: {duplicateMatch.complaintId}</p>
+                <p className="mt-1">Status: {duplicateMatch.status}</p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Link
+                    href={`/track?id=${encodeURIComponent(duplicateMatch.complaintId)}`}
+                    className="rounded-lg border border-amber-200/40 px-4 py-2 font-semibold text-amber-100 hover:bg-amber-200/10"
+                  >
+                    View Existing Complaint
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void createComplaint(true);
+                    }}
+                    disabled={isCreating}
+                    className="rounded-lg bg-amber-300 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50"
+                  >
+                    Submit Anyway
+                  </button>
+                </div>
+              </div>
+            )}
+            <button onClick={() => void createComplaint()} disabled={isCreating || Boolean(complaintId) || Boolean(duplicateMatch)} className="mt-6 rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">
               {isCreating ? "Creating..." : "Create Complaint"}
             </button>
           </div>
