@@ -1,5 +1,7 @@
 # PotholeWatch AI
 
+> AI assistance disclosure: This project documentation was refined with AI-assisted writing support for clarity and structure. The underlying product concept, workflow, implementation, and technical decisions were developed as part of the project itself.
+
 ## Problem
 Cities often receive noisy, duplicate, or poorly documented civic complaints. Residents struggle to report road damage clearly, and local authorities receive incomplete information that slows resolution. In many cases, the same issue is reported multiple times without useful verification or tracking.
 
