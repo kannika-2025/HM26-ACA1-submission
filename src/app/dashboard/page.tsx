@@ -48,12 +48,31 @@ export default function DashboardPage() {
     isSupabaseConfigured ? "loading" : "missing_config"
   );
   const [queryError, setQueryError] = useState("");
+  const [isOfficeHead, setIsOfficeHead] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem(
+        "potholewatch_current_user"
+      );
+
+      if (!storedUser) {
+        setIsOfficeHead(false);
+        return;
+      }
+
+      const user = JSON.parse(storedUser);
+      setIsOfficeHead(user?.role === "office_head");
+    } catch {
+      setIsOfficeHead(false);
+    }
+  }, []);
 
   async function updateComplaintStatus(
     complaintId: string | null,
     newStatus: string
   ) {
-    if (!complaintId) return;
+    if (!complaintId || !isOfficeHead) return;
 
     const updatedAt = new Date().toISOString();
 
@@ -111,7 +130,9 @@ export default function DashboardPage() {
             message: error.message,
           });
 
-          setQueryError(error.message || "Unable to query complaints.");
+          setQueryError(
+            error.message || "Unable to query complaints."
+          );
 
           const errorText =
             `${error.code || ""} ${error.message || ""}`.toLowerCase();
@@ -124,7 +145,9 @@ export default function DashboardPage() {
             errorText.includes("fetch");
 
           setDashboardState(
-            isConnectionError ? "connection_error" : "database_error"
+            isConnectionError
+              ? "connection_error"
+              : "database_error"
           );
         } else {
           const rows = (data || []) as ComplaintRow[];
@@ -135,10 +158,15 @@ export default function DashboardPage() {
           });
 
           setComplaints(rows);
-          setDashboardState(rows.length === 0 ? "empty" : "ready");
+          setDashboardState(
+            rows.length === 0 ? "empty" : "ready"
+          );
         }
       } catch (error) {
-        console.error("Dashboard Supabase connection failure:", error);
+        console.error(
+          "Dashboard Supabase connection failure:",
+          error
+        );
 
         const message =
           error instanceof Error
@@ -157,29 +185,31 @@ export default function DashboardPage() {
     complaints.filter(
       (complaint) =>
         status === "Needs Review"
-          ? complaint.verification_status?.trim().toLowerCase() ===
-            "needs review"
-          : complaint.current_status?.trim().toLowerCase() ===
-            status.toLowerCase()
+          ? complaint.verification_status
+              ?.trim()
+              .toLowerCase() === "needs review"
+          : complaint.current_status
+              ?.trim()
+              .toLowerCase() === status.toLowerCase()
     ).length;
 
-  const departmentCounts = complaints.reduce<Record<string, number>>(
-    (counts, complaint) => {
-      const department = complaint.department || "Unassigned";
-      counts[department] = (counts[department] || 0) + 1;
-      return counts;
-    },
-    {}
-  );
+  const departmentCounts = complaints.reduce<
+    Record<string, number>
+  >((counts, complaint) => {
+    const department = complaint.department || "Unassigned";
+    counts[department] = (counts[department] || 0) + 1;
+    return counts;
+  }, {});
 
-  const authorityCounts = complaints.reduce<Record<string, number>>(
-    (counts, complaint) => {
-      const authority = complaint.assigned_authority || "Unassigned";
-      counts[authority] = (counts[authority] || 0) + 1;
-      return counts;
-    },
-    {}
-  );
+  const authorityCounts = complaints.reduce<
+    Record<string, number>
+  >((counts, complaint) => {
+    const authority =
+      complaint.assigned_authority || "Unassigned";
+
+    counts[authority] = (counts[authority] || 0) + 1;
+    return counts;
+  }, {});
 
   const neglectCount = complaints.filter((complaint) => {
     if (
@@ -190,7 +220,8 @@ export default function DashboardPage() {
     }
 
     return (
-      Date.now() - new Date(complaint.last_updated).getTime() >=
+      Date.now() -
+        new Date(complaint.last_updated).getTime() >=
       2 * 24 * 60 * 60 * 1000
     );
   }).length;
@@ -208,8 +239,15 @@ export default function DashboardPage() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-slate-400">
-            A live summary of complaints recorded in PotholeWatch AI.
+            A live summary of complaints recorded in
+            PotholeWatch AI.
           </p>
+
+          {isOfficeHead && (
+            <div className="mt-4 inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-300">
+              Office Head Mode
+            </div>
+          )}
         </div>
 
         {dashboardState === "loading" && (
@@ -225,8 +263,8 @@ export default function DashboardPage() {
             </h2>
 
             <p className="mt-2 text-sm text-orange-100/70">
-              Complaint statistics cannot load because the public Supabase
-              environment variables are missing.
+              Complaint statistics cannot load because the
+              public Supabase environment variables are missing.
             </p>
           </div>
         )}
@@ -304,7 +342,10 @@ export default function DashboardPage() {
             <div className="mt-8 grid gap-6 lg:grid-cols-2">
               <ComplaintList
                 title="Recent complaints"
-                complaints={[...complaints].reverse().slice(0, 5)}
+                complaints={[...complaints]
+                  .reverse()
+                  .slice(0, 5)}
+                isOfficeHead={isOfficeHead}
                 onStatusUpdate={updateComplaintStatus}
               />
 
@@ -313,10 +354,11 @@ export default function DashboardPage() {
                 complaints={complaints
                   .filter(
                     (complaint) =>
-                      complaint.verification_status?.toLowerCase() ===
-                      "needs review"
+                      complaint.verification_status
+                        ?.toLowerCase() === "needs review"
                   )
                   .slice(0, 5)}
+                isOfficeHead={isOfficeHead}
                 onStatusUpdate={updateComplaintStatus}
               />
             </div>
@@ -349,7 +391,9 @@ function CountList({
               key={label}
               className="flex items-center justify-between border-b border-white/10 pb-3 text-sm last:border-0"
             >
-              <span className="text-slate-300">{label}</span>
+              <span className="text-slate-300">
+                {label}
+              </span>
 
               <span className="font-semibold text-cyan-300">
                 {count}
@@ -383,10 +427,12 @@ function StatCard({
 function ComplaintList({
   title,
   complaints,
+  isOfficeHead,
   onStatusUpdate,
 }: {
   title: string;
   complaints: ComplaintRow[];
+  isOfficeHead: boolean;
   onStatusUpdate: (
     complaintId: string | null,
     newStatus: string
@@ -436,69 +482,78 @@ function ComplaintList({
                     "Authority not assigned"}
                 </p>
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {status === "Submitted" && (
-                    <button
-                      onClick={() =>
-                        onStatusUpdate(
-                          complaint.id,
-                          "Acknowledged"
-                        )
-                      }
-                      className="rounded-lg bg-cyan-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
-                    >
-                      Acknowledge
-                    </button>
-                  )}
+                {isOfficeHead && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {status === "Submitted" && (
+                      <button
+                        onClick={() =>
+                          onStatusUpdate(
+                            complaint.id,
+                            "Acknowledged"
+                          )
+                        }
+                        className="rounded-lg bg-cyan-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
+                      >
+                        Acknowledge
+                      </button>
+                    )}
 
-                  {status === "Acknowledged" && (
-                    <button
-                      onClick={() =>
-                        onStatusUpdate(
-                          complaint.id,
-                          "In Progress"
-                        )
-                      }
-                      className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-amber-300"
-                    >
-                      Start Work
-                    </button>
-                  )}
+                    {status === "Acknowledged" && (
+                      <button
+                        onClick={() =>
+                          onStatusUpdate(
+                            complaint.id,
+                            "In Progress"
+                          )
+                        }
+                        className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-amber-300"
+                      >
+                        Start Work
+                      </button>
+                    )}
 
-                  {status === "In Progress" && (
-                    <button
-                      onClick={() =>
-                        onStatusUpdate(
-                          complaint.id,
-                          "Fixed"
-                        )
-                      }
-                      className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300"
-                    >
-                      Mark Fixed
-                    </button>
-                  )}
+                    {status === "In Progress" && (
+                      <button
+                        onClick={() =>
+                          onStatusUpdate(
+                            complaint.id,
+                            "Fixed"
+                          )
+                        }
+                        className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300"
+                      >
+                        Mark Fixed
+                      </button>
+                    )}
 
-                  {status === "Fixed" && (
-                    <span className="rounded-lg bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-300">
-                      ✓ Complaint Resolved
-                    </span>
-                  )}
+                    {status === "Fixed" && (
+                      <span className="rounded-lg bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-300">
+                        ✓ Complaint Resolved
+                      </span>
+                    )}
 
-                  {status === "Needs Review" && (
-                    <button
-                      onClick={() =>
-                        onStatusUpdate(
-                          complaint.id,
-                          "Acknowledged"
-                        )
-                      }
-                      className="rounded-lg bg-orange-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-orange-300"
-                    >
-                      Review & Acknowledge
-                    </button>
-                  )}
-                </div>
+                    {status === "Needs Review" && (
+                      <button
+                        onClick={() =>
+                          onStatusUpdate(
+                            complaint.id,
+                            "Acknowledged"
+                          )
+                        }
+                        className="rounded-lg bg-orange-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-orange-300"
+                      >
+                        Review & Acknowledge
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {!isOfficeHead && (
+                  <p className="mt-4 text-xs text-slate-500">
+                    Status updates are managed by the authorized
+                    office head.
+                  </p>
+                )}
               </div>
             );
           })}
