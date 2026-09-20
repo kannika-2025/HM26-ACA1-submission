@@ -5,6 +5,21 @@ import { useEffect, useState } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 type ComplaintRow = {
+  id: string | null;
+  registered_name: string | null;
+  registered_phone: string | null;
+  registered_email: string | null;
+  registered_on: string | null;
+  issue: string | null;
+  location: string | null;
+  coordinates: string | null;
+  severity: string | null;
+  description: string | null;
+  evidence: string | null;
+  verification_status: string | null;
+  verification_confidence: string | null;
+  duplicate_check: string | null;
+  location_check: string | null;
   current_status: string | null;
   department: string | null;
   assigned_authority: string | null;
@@ -17,15 +32,34 @@ const statusLabels = [
   "Acknowledged",
   "In Progress",
   "Fixed",
+  "Needs Review",
 ];
+
+type DashboardState =
+  | "loading"
+  | "missing_config"
+  | "connection_error"
+  | "database_error"
+  | "empty"
+  | "ready";
 
 export default function DashboardPage() {
   const [complaints, setComplaints] = useState<ComplaintRow[]>([]);
-  const [unavailable, setUnavailable] = useState(!isSupabaseConfigured);
-  const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [dashboardState, setDashboardState] = useState<DashboardState>(
+    isSupabaseConfigured ? "loading" : "missing_config"
+  );
+  const [queryError, setQueryError] = useState("");
 
   useEffect(() => {
+    console.info("Dashboard Supabase configuration:", {
+      hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+      hasAnonKey: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    });
+
     if (!isSupabaseConfigured) {
+      console.error(
+        "Dashboard Supabase configuration error: required public environment variable is missing."
+      );
       return;
     }
 
@@ -33,20 +67,48 @@ export default function DashboardPage() {
       try {
         const { data, error } = await supabase
           .from("complaints")
-          .select("current_status, department, assigned_authority, created_at, last_updated");
+          .select(
+            "id, registered_name, registered_phone, registered_email, registered_on, issue, location, coordinates, severity, description, evidence, verification_status, verification_confidence, duplicate_check, location_check, assigned_authority, department, current_status, last_updated, created_at"
+          );
 
         if (error) {
-          console.error("Unable to load complaint statistics:", error);
-          setUnavailable(true);
+          console.error("Dashboard Supabase query failure:", {
+            success: false,
+            code: error.code,
+            message: error.message,
+          });
+          setQueryError(error.message || "Unable to query complaints.");
+          const errorText = `${error.code || ""} ${error.message || ""}`.toLowerCase();
+          const isConnectionError =
+            errorText.includes("401") ||
+            errorText.includes("403") ||
+            errorText.includes("jwt") ||
+            errorText.includes("api key") ||
+            errorText.includes("fetch");
+          setDashboardState(
+            isConnectionError ? "connection_error" : "database_error"
+          );
         } else {
-          setComplaints(data || []);
+          const rows = (data || []) as ComplaintRow[];
+          console.info("Dashboard Supabase query success:", {
+            success: true,
+            rowCount: rows.length,
+          });
+          setComplaints(rows);
+          setDashboardState(rows.length === 0 ? "empty" : "ready");
         }
       } catch (error) {
-        console.error("Unable to load complaint statistics:", error);
-        setUnavailable(true);
+        console.error("Dashboard Supabase connection failure:", {
+          success: false,
+          code: "CONNECTION_ERROR",
+          message:
+            error instanceof Error ? error.message : "Unable to reach Supabase.",
+        });
+        setQueryError(
+          error instanceof Error ? error.message : "Unable to reach Supabase."
+        );
+        setDashboardState("connection_error");
       }
-
-      setLoading(false);
     }
 
     loadStatistics();
@@ -54,7 +116,9 @@ export default function DashboardPage() {
 
   const countStatus = (status: string) =>
     complaints.filter(
-      (complaint) => complaint.current_status === status
+      (complaint) =>
+        complaint.current_status?.trim().toLowerCase() ===
+        status.toLowerCase()
     ).length;
 
   const departmentCounts = complaints.reduce<Record<string, number>>(
@@ -76,7 +140,10 @@ export default function DashboardPage() {
   );
 
   const neglectCount = complaints.filter((complaint) => {
-    if (complaint.current_status === "Fixed" || !complaint.last_updated) {
+    if (
+      complaint.current_status?.trim().toLowerCase() === "fixed" ||
+      !complaint.last_updated
+    ) {
       return false;
     }
 
@@ -130,24 +197,51 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {loading && (
+        {dashboardState === "loading" && (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-slate-400">
             Loading complaint statistics...
           </div>
         )}
 
-        {!loading && unavailable && (
+        {dashboardState === "missing_config" && (
           <div className="rounded-2xl border border-orange-400/20 bg-orange-400/10 p-8">
             <h2 className="text-xl font-semibold text-orange-300">
-              Statistics unavailable
+              Supabase configuration missing
             </h2>
             <p className="mt-2 text-sm text-orange-100/70">
-              Supabase is not configured or could not be reached. Please try again later.
+              Complaint statistics cannot load because the public Supabase environment variables are missing.
             </p>
           </div>
         )}
 
-        {!loading && !unavailable && (
+        {(dashboardState === "connection_error" ||
+          dashboardState === "database_error") && (
+          <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-8">
+            <h2 className="text-xl font-semibold text-red-300">
+              {dashboardState === "connection_error"
+                ? "Supabase connection unavailable"
+                : "Complaint query failed"}
+            </h2>
+            <p className="mt-2 text-sm text-red-100/70">
+              {dashboardState === "connection_error"
+                ? "The dashboard could not connect to Supabase. Please try again later."
+                : "Supabase returned a database or schema error while reading complaints."}
+            </p>
+            {queryError && (
+              <p className="mt-3 break-words text-xs text-red-100/50">
+                {queryError}
+              </p>
+            )}
+          </div>
+        )}
+
+        {dashboardState === "empty" && (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-slate-400">
+            No complaints recorded yet
+          </div>
+        )}
+
+        {dashboardState === "ready" && (
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <StatCard label="Total complaints" value={complaints.length} />
