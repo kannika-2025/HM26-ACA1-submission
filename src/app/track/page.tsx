@@ -27,6 +27,7 @@ type Complaint = {
   department: string;
   currentStatus: string;
   lastUpdated: string;
+  createdAt?: string;
 };
 
 const demoComplaints: Complaint[] = [
@@ -242,6 +243,7 @@ export default function TrackPage() {
       department: String(row.department || "Not assigned"),
       currentStatus: String(row.current_status || "Submitted"),
       lastUpdated: formatDate(row.last_updated),
+      createdAt: formatDate(row.created_at),
     };
   }
 
@@ -262,6 +264,35 @@ export default function TrackPage() {
 
   function getStatusIndex(status: string) {
     return statusSteps.indexOf(status);
+  }
+
+  function getDaysOpen() {
+    if (!complaint) {
+      return 0;
+    }
+
+    const createdAt = complaint.createdAt || complaint.registeredBy.registeredOn;
+    const createdTime = new Date(createdAt).getTime();
+    if (Number.isNaN(createdTime)) {
+      return 0;
+    }
+
+    return Math.max(
+      0,
+      Math.floor((Date.now() - createdTime) / (1000 * 60 * 60 * 24))
+    );
+  }
+
+  function isInactive() {
+    if (!complaint || complaint.currentStatus === "Fixed") {
+      return false;
+    }
+
+    const updatedTime = new Date(complaint.lastUpdated).getTime();
+    return (
+      !Number.isNaN(updatedTime) &&
+      Date.now() - updatedTime >= 2 * 24 * 60 * 60 * 1000
+    );
   }
 
   return (
@@ -376,6 +407,20 @@ export default function TrackPage() {
                   {complaint.currentStatus}
                 </div>
               </div>
+            </div>
+
+            {isInactive() && (
+              <div className="rounded-2xl border border-orange-400/30 bg-orange-400/10 p-5 text-orange-200">
+                <p className="font-semibold">
+                  ⚠️ Neglect Alert: This complaint has been open without a recent status update.
+                </p>
+              </div>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <InfoItem label="Days Open" value={String(getDaysOpen())} />
+              <InfoItem label="Last Updated" value={complaint.lastUpdated} />
+              <InfoItem label="Current Status" value={complaint.currentStatus} />
             </div>
 
             {/* Registered By */}

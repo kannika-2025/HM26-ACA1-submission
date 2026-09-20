@@ -862,7 +862,7 @@ export default function ReportPage() {
         model:
           verificationModel,
 
-        duplicateCheck: "No duplicate detected",
+        duplicateCheck: "Not checked",
 
         locationCheck: "Location verified",
       },
@@ -907,6 +907,20 @@ export default function ReportPage() {
 
     if (isSupabaseConfigured) {
       try {
+        let duplicateCheck = "Not checked";
+        const { data: possibleDuplicates } = await supabase
+          .from("complaints")
+          .select("id")
+          .eq("issue", complaint.issue)
+          .eq("coordinates", complaint.coordinates)
+          .limit(1);
+
+        if (possibleDuplicates?.length) {
+          duplicateCheck = "Possible duplicate - review required";
+          complaint.verification.status = "NEEDS_REVIEW";
+          complaint.verification.duplicateCheck = duplicateCheck;
+        }
+
         const { error } = await supabase.from("complaints").insert({
           id: generatedId,
           registered_name: complaint.registeredBy.name,
@@ -923,7 +937,7 @@ export default function ReportPage() {
           verification_confidence: String(
             complaint.verification.confidence
           ),
-          duplicate_check: "No duplicate detected",
+          duplicate_check: duplicateCheck,
           location_check: "Location verified",
           assigned_authority: complaint.authority.name,
           department: getDepartment(complaint.issue),

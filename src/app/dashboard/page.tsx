@@ -7,6 +7,9 @@ import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 type ComplaintRow = {
   current_status: string | null;
   department: string | null;
+  assigned_authority: string | null;
+  created_at: string | null;
+  last_updated: string | null;
 };
 
 const statusLabels = [
@@ -30,7 +33,7 @@ export default function DashboardPage() {
       try {
         const { data, error } = await supabase
           .from("complaints")
-          .select("current_status, department");
+          .select("current_status, department, assigned_authority, created_at, last_updated");
 
         if (error) {
           console.error("Unable to load complaint statistics:", error);
@@ -63,6 +66,26 @@ export default function DashboardPage() {
     {}
   );
 
+  const authorityCounts = complaints.reduce<Record<string, number>>(
+    (counts, complaint) => {
+      const authority = complaint.assigned_authority || "Unassigned";
+      counts[authority] = (counts[authority] || 0) + 1;
+      return counts;
+    },
+    {}
+  );
+
+  const neglectCount = complaints.filter((complaint) => {
+    if (complaint.current_status === "Fixed" || !complaint.last_updated) {
+      return false;
+    }
+
+    return (
+      Date.now() - new Date(complaint.last_updated).getTime() >=
+      2 * 24 * 60 * 60 * 1000
+    );
+  }).length;
+
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <header className="border-b border-white/10 bg-slate-950/95">
@@ -77,6 +100,12 @@ export default function DashboardPage() {
               className="text-sm font-semibold text-slate-300 hover:text-cyan-300"
             >
               Track Complaint
+            </Link>
+            <Link
+              href="/detect"
+              className="text-sm font-semibold text-slate-300 hover:text-cyan-300"
+            >
+              🤖 AI Civic Scan
             </Link>
             <Link
               href="/report"
@@ -131,21 +160,45 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-xl font-bold">Complaints by department</h2>
-              {Object.keys(departmentCounts).length === 0 ? (
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <StatCard label="Neglect / inactive" value={neglectCount} />
+              <StatCard label="Active complaints" value={complaints.filter((complaint) => complaint.current_status !== "Fixed").length} />
+            </div>
+
+            <div className="mt-8 grid gap-6 lg:grid-cols-2">
+              <CountList title="Complaints by department" counts={departmentCounts} />
+              <CountList title="Complaints by authority" counts={authorityCounts} />
+            </div>
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function CountList({
+  title,
+  counts,
+}: {
+  title: string;
+  counts: Record<string, number>;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-xl font-bold">{title}</h2>
+              {Object.keys(counts).length === 0 ? (
                 <p className="mt-4 text-sm text-slate-400">
                   No complaints have been recorded yet.
                 </p>
               ) : (
                 <div className="mt-5 space-y-3">
-                  {Object.entries(departmentCounts).map(
-                    ([department, count]) => (
+                  {Object.entries(counts).map(
+                    ([label, count]) => (
                       <div
-                        key={department}
+                        key={label}
                         className="flex items-center justify-between border-b border-white/10 pb-3 text-sm last:border-0"
                       >
-                        <span className="text-slate-300">{department}</span>
+                        <span className="text-slate-300">{label}</span>
                         <span className="font-semibold text-cyan-300">
                           {count}
                         </span>
@@ -154,11 +207,7 @@ export default function DashboardPage() {
                   )}
                 </div>
               )}
-            </div>
-          </>
-        )}
-      </section>
-    </main>
+    </div>
   );
 }
 

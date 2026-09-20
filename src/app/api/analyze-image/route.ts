@@ -42,6 +42,8 @@ IMPORTANT RULES:
 - Do NOT assume an issue just because the user may have selected that issue.
 - Do NOT identify an issue from the filename.
 - Do NOT invent details that cannot be seen.
+- If the image appears staged, fake-looking, manipulated, or too ambiguous to trust, return "Unknown" with "NOT_VERIFIED".
+- Do not claim that an image is a duplicate; duplicate review is handled separately by the application.
 - If the image does not clearly show a supported civic issue, return "Unknown".
 - A normal road, normal street, person, building, vehicle, landscape, or unrelated object should NOT be treated as a civic issue.
 - If the image is blurry or insufficient for reliable verification, return "Unknown".
