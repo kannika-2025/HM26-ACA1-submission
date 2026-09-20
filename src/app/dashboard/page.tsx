@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
@@ -117,8 +116,9 @@ export default function DashboardPage() {
   const countStatus = (status: string) =>
     complaints.filter(
       (complaint) =>
-        complaint.current_status?.trim().toLowerCase() ===
-        status.toLowerCase()
+        status === "Needs Review"
+          ? complaint.verification_status?.trim().toLowerCase() === "needs review"
+          : complaint.current_status?.trim().toLowerCase() === status.toLowerCase()
     ).length;
 
   const departmentCounts = complaints.reduce<Record<string, number>>(
@@ -155,35 +155,6 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-white/10 bg-slate-950/95">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <Link href="/" className="text-xl font-bold">
-            PotholeWatch <span className="text-cyan-400">AI</span>
-          </Link>
-
-          <nav className="flex items-center gap-4">
-            <Link
-              href="/track"
-              className="text-sm font-semibold text-slate-300 hover:text-cyan-300"
-            >
-              Track Complaint
-            </Link>
-            <Link
-              href="/detect"
-              className="text-sm font-semibold text-slate-300 hover:text-cyan-300"
-            >
-              🤖 AI Civic Scan
-            </Link>
-            <Link
-              href="/report"
-              className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300"
-            >
-              Report Civic Issue
-            </Link>
-          </nav>
-        </div>
-      </header>
-
       <section className="mx-auto max-w-6xl px-6 py-12">
         <div className="mb-10">
           <p className="text-sm font-semibold uppercase tracking-widest text-cyan-400">
@@ -227,11 +198,6 @@ export default function DashboardPage() {
                 ? "The dashboard could not connect to Supabase. Please try again later."
                 : "Supabase returned a database or schema error while reading complaints."}
             </p>
-            {queryError && (
-              <p className="mt-3 break-words text-xs text-red-100/50">
-                {queryError}
-              </p>
-            )}
           </div>
         )}
 
@@ -262,6 +228,11 @@ export default function DashboardPage() {
             <div className="mt-8 grid gap-6 lg:grid-cols-2">
               <CountList title="Complaints by department" counts={departmentCounts} />
               <CountList title="Complaints by authority" counts={authorityCounts} />
+            </div>
+
+            <div className="mt-8 grid gap-6 lg:grid-cols-2">
+              <ComplaintList title="Recent complaints" complaints={[...complaints].reverse().slice(0, 5)} />
+              <ComplaintList title="Needs Review queue" complaints={complaints.filter((complaint) => complaint.verification_status?.toLowerCase() === "needs review").slice(0, 5)} />
             </div>
           </>
         )}
@@ -310,6 +281,32 @@ function StatCard({ label, value }: { label: string; value: number }) {
     <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
       <p className="text-sm text-slate-400">{label}</p>
       <p className="mt-3 text-3xl font-bold text-cyan-300">{value}</p>
+    </div>
+  );
+}
+
+function ComplaintList({ title, complaints }: { title: string; complaints: ComplaintRow[] }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+      <h2 className="text-xl font-bold">{title}</h2>
+      {complaints.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-400">No complaints in this view.</p>
+      ) : (
+        <div className="mt-5 space-y-3">
+          {complaints.map((complaint) => (
+            <div key={complaint.id} className="rounded-xl bg-slate-950/60 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-slate-100">{complaint.issue || "Civic issue"}</p>
+                  <p className="mt-1 text-xs text-slate-500">{complaint.id}</p>
+                </div>
+                <span className="text-xs font-semibold text-cyan-300">{complaint.current_status || "Submitted"}</span>
+              </div>
+              <p className="mt-2 text-sm text-slate-400">{complaint.department || "Human Review"}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

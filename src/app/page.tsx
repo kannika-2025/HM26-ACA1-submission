@@ -3,73 +3,21 @@ import Link from "next/link";
 export default function Home() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      {/* NAVBAR */}
-      <header className="border-b border-white/10 bg-slate-950/95">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-          <Link
-            href="/"
-            className="text-xl font-bold"
-          >
-            🕳️ PotholeWatch AI
-          </Link>
-
-          <nav className="flex items-center gap-3">
-            <Link
-              href="/track"
-              className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5"
-            >
-              🔎 Track Complaint
-            </Link>
-
-            <Link
-              href="/detect"
-              className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5"
-            >
-              🤖 AI Civic Scan
-            </Link>
-
-            <Link
-              href="/dashboard"
-              className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5"
-            >
-              Dashboard
-            </Link>
-
-            <Link
-              href="/report"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-500"
-            >
-              Report Pothole
-            </Link>
-          </nav>
-        </div>
-      </header>
-
       {/* HERO */}
       <section className="relative overflow-hidden">
         <div className="mx-auto max-w-7xl px-6 py-24 md:py-32">
           <div className="max-w-4xl">
-            <div className="mb-6 inline-flex rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-300">
-              🏙️ Smart Civic Reporting for Mysuru
+            <div className="mb-6 inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-300">
+              Smart civic reporting for Mysuru
             </div>
 
             <h1 className="text-5xl font-bold leading-tight tracking-tight md:text-7xl">
-              Detect.
-              <br />
-              Verify.
-              <br />
-              Prioritize.
-              <br />
-              <span className="text-blue-500">
-                Resolve.
-              </span>
+              Detect. Verify.<br />
+              Prioritize. <span className="text-cyan-400">Resolve.</span>
             </h1>
 
             <p className="mt-8 max-w-2xl text-lg leading-8 text-slate-400 md:text-xl">
-              PotholeWatch AI helps citizens report road
-              problems with photo evidence and GPS
-              location, while making complaints easier to
-              verify, prioritize and track.
+              Citizens can report potholes and civic issues with evidence and location. PotholeWatch AI verifies submissions, detects duplicates, routes them to the right authority and keeps progress visible.
             </p>
 
             <div className="mt-10 flex flex-wrap gap-4">
@@ -77,14 +25,20 @@ export default function Home() {
                 href="/report"
                 className="rounded-xl bg-blue-600 px-7 py-4 font-bold transition hover:bg-blue-500"
               >
-                📷 Report a Pothole
+                Report an Issue
               </Link>
 
               <Link
                 href="/track"
                 className="rounded-xl border border-white/10 px-7 py-4 font-bold text-slate-200 transition hover:bg-white/5"
               >
-                🔎 Track Complaint
+                Track Complaint
+              </Link>
+              <Link href="/detect" className="rounded-xl border border-white/10 px-7 py-4 font-bold text-slate-200 transition hover:bg-white/5">
+                AI Civic Scan
+              </Link>
+              <Link href="/dashboard" className="rounded-xl border border-white/10 px-7 py-4 font-bold text-slate-200 transition hover:bg-white/5">
+                View Public Dashboard
               </Link>
             </div>
           </div>
@@ -100,34 +54,36 @@ export default function Home() {
             </p>
 
             <h2 className="mt-3 text-3xl font-bold md:text-4xl">
-              From complaint to resolution
+              One civic workflow, from report to resolution
             </h2>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <FeatureCard
               icon="📷"
-              title="Capture"
-              description="Capture a pothole using your phone camera and provide evidence."
+              title="AI Evidence Verification"
+              description="Assess image quality and issue consistency without judging the citizen."
             />
 
             <FeatureCard
               icon="📍"
-              title="Locate"
-              description="Capture the complaint location using your phone's GPS."
+              title="Duplicate Detection"
+              description="Compare issue type, image fingerprints and nearby coordinates before creating another case."
             />
 
             <FeatureCard
               icon="🤖"
-              title="Verify"
-              description="Check evidence and identify complaints that may need review."
+              title="Smart Authority Routing"
+              description="Route reports to the relevant authority and civic department."
             />
 
             <FeatureCard
               icon="🔎"
-              title="Track"
-              description="Follow the complaint status from submission through resolution."
+              title="Complaint Tracking"
+              description="Give citizens a clear status timeline and current ownership."
             />
+            <FeatureCard icon="📊" title="Neglect / Priority Monitoring" description="Use transparent prototype heuristics for severity, age and public impact." />
+            <FeatureCard icon="🌐" title="Public Transparency" description="Show aggregate civic progress without exposing private contact details." />
           </div>
         </div>
       </section>
@@ -171,11 +127,8 @@ export default function Home() {
                 description="Use severity and complaint information to determine priority."
               />
 
-              <WorkflowStep
-                number="04"
-                title="Track"
-                description="Give citizens visibility into complaint progress."
-              />
+              <WorkflowStep number="04" title="Track" description="Give citizens visibility into complaint progress." />
+              <WorkflowStep number="05" title="Resolve" description="Keep the outcome visible to the community." />
             </div>
           </div>
         </div>
@@ -198,31 +151,19 @@ export default function Home() {
               href="/report"
               className="rounded-xl bg-white px-7 py-4 font-bold text-blue-700 transition hover:bg-slate-100"
             >
-              📷 Report a Pothole
+              Report an Issue
             </Link>
 
             <Link
               href="/track"
               className="rounded-xl border border-white/30 px-7 py-4 font-bold text-white transition hover:bg-white/10"
             >
-              🔎 Track Complaint
+              Track Complaint
             </Link>
           </div>
         </div>
       </section>
 
-      {/* FOOTER */}
-      <footer className="border-t border-white/10 bg-slate-950">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-6 py-8 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
-          <p>
-            © 2026 PotholeWatch AI
-          </p>
-
-          <p>
-            Detect. Verify. Prioritize. Resolve.
-          </p>
-        </div>
-      </footer>
     </main>
   );
 }

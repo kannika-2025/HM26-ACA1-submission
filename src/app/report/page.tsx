@@ -107,6 +107,11 @@ export default function ReportPage() {
 
   const [syncMessage, setSyncMessage] =
     useState("");
+  const [duplicateMatch, setDuplicateMatch] = useState<{
+    id: string;
+    status: string;
+    area: string;
+  } | null>(null);
 
   const [isLoadingUser, setIsLoadingUser] =
     useState(true);
@@ -756,7 +761,7 @@ export default function ReportPage() {
     return departmentMap[issue] || "Road & Infrastructure";
   }
 
-  async function submitComplaint() {
+  async function submitComplaint(ignoreDuplicate = false) {
     if (!name.trim()) {
       alert(
         "Please enter your full name."
@@ -764,52 +769,71 @@ export default function ReportPage() {
       return;
     }
 
-    if (!phone.trim()) {
-      alert(
-        "Please enter your phone number."
-      );
-      return;
-    }
+    const needsReview = manualReview || verificationStatus !== "verified";
+    const selectedAuthority = authority || {
+      name: "City Corporation",
+      reason: "Location was not available, so the complaint will be reviewed by the city civic desk.",
+      confidence: "Manual review",
+    };
+    setAuthority(selectedAuthority);
 
-    if (!email.trim()) {
-      alert(
-        "Please enter your email address."
-      );
-      return;
-    }
+    const evidenceFile = photo
+      ? await dataUrlToFile(photo, "civic-evidence.jpg")
+      : null;
+    const evidenceHash = evidenceFile
+      ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await evidenceFile.arrayBuffer())))
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("")
+      : null;
 
-    if (!photo && !videoFile) {
-      alert(
-        "Please capture a photo or video."
-      );
-      return;
-    }
-
-    if (
-      latitude === null ||
-      longitude === null
-    ) {
-      alert(
-        "Please capture your GPS location."
-      );
-      return;
-    }
-
-    if (
-      verificationStatus !== "verified" &&
-      !manualReview
-    ) {
-      alert(
-        "Please complete Gemini evidence verification before submitting."
-      );
-      return;
-    }
-
-    if (!authority) {
-      alert(
-        "Responsible authority has not been determined yet."
-      );
-      return;
+    if (isSupabaseConfigured && !ignoreDuplicate) {
+      const { data: existing, error: duplicateError } = await supabase
+        .from("complaints")
+        .select("*")
+        .eq("issue", issueType);
+      if (duplicateError) {
+        console.error("Report duplicate check failed:", duplicateError);
+        setSyncMessage("Complaint data is temporarily unavailable. Please try again.");
+        return;
+      }
+      const currentCoordinates = latitude !== null && longitude !== null
+        ? { latitude, longitude }
+        : null;
+      const parseCoordinates = (value: unknown) => {
+        const match = typeof value === "string" ? value.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/) : null;
+        return match ? { latitude: Number(match[1]), longitude: Number(match[2]) } : null;
+      };
+      const distance = (first: { latitude: number; longitude: number }, second: { latitude: number; longitude: number }) => {
+        const lat = (second.latitude - first.latitude) * 111320;
+        const lng = (second.longitude - first.longitude) * 111320 * Math.cos((first.latitude * Math.PI) / 180);
+        return Math.sqrt(lat ** 2 + lng ** 2);
+      };
+      const statusLabel = (value: unknown) => {
+        const status = String(value || "Submitted");
+        return ["RESOLVED", "CLOSED", "Fixed"].includes(status)
+          ? "Fixed"
+          : ["ACKNOWLEDGED", "ASSIGNED", "WORK STARTED", "In Progress"].includes(status)
+            ? "In Progress"
+            : "Submitted";
+      };
+      const match = (existing || []).find((row) => {
+        const candidateCoordinates = row.latitude !== null && row.longitude !== null
+          ? { latitude: Number(row.latitude), longitude: Number(row.longitude) }
+          : parseCoordinates(row.coordinates);
+        const candidateHash = typeof row.evidence_hash === "string"
+          ? row.evidence_hash
+          : String(row.evidence || "").match(/evidence_hash:([a-f0-9]{64})/i)?.[1] || null;
+        const nearby = Boolean(currentCoordinates && candidateCoordinates && distance(currentCoordinates, candidateCoordinates) <= 100);
+        return nearby && Boolean(evidenceHash && candidateHash && evidenceHash === candidateHash) || nearby;
+      });
+      if (match) {
+        setDuplicateMatch({
+          id: String(match.id),
+          status: statusLabel(match.current_status || match.status),
+          area: String(match.location || match.coordinates || "Reported location"),
+        });
+        return;
+      }
     }
 
     const generatedId =
@@ -862,20 +886,26 @@ export default function ReportPage() {
 
       description,
 
-      location: `GPS: ${latitude.toFixed(
-        6
-      )}, ${longitude.toFixed(6)}`,
+      location:
+        latitude !== null && longitude !== null
+          ? `GPS: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+          : "Location unavailable",
 
-      coordinates: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+      coordinates:
+        latitude !== null && longitude !== null
+          ? `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+          : "Location unavailable",
 
       latitude,
 
       longitude,
 
-      evidence: photo ? "Photo" : "Video",
+      evidence: evidenceHash
+        ? `${photo ? "Photo" : "Video"}; evidence_hash:${evidenceHash}`
+        : photo ? "Photo" : "Video",
 
       verification: {
-        status: manualReview ? "Needs Review" : "VERIFIED",
+        status: needsReview ? "Needs Review" : "VERIFIED",
 
         detectedIssue,
 
@@ -885,29 +915,32 @@ export default function ReportPage() {
         model:
           verificationModel,
 
-        duplicateCheck: "Not checked",
+          duplicateCheck: duplicateMatch ? `Potential duplicate: ${duplicateMatch.id}` : "No duplicate detected",
 
-        locationCheck: "Location verified",
+        locationCheck:
+          latitude !== null && longitude !== null
+            ? "Location verified"
+            : "Location unavailable - manual review required",
       },
 
       authority: {
-        name:
-          authority.name,
+          name:
+          selectedAuthority.name,
 
-        reason:
-          authority.reason,
+          reason:
+          selectedAuthority.reason,
 
-        confidence:
-          authority.confidence,
+          confidence:
+          selectedAuthority.confidence,
       },
 
       status: "Submitted",
 
       currentStatus: "Submitted",
 
-      assignedAuthority: authority.name,
+      assignedAuthority: selectedAuthority.name,
 
-      department: manualReview
+      department: needsReview
         ? "Human Review"
         : getDepartment(issueType),
 
@@ -1115,37 +1148,6 @@ export default function ReportPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
 
-      {/* HEADER */}
-      <header className="border-b border-white/10 bg-slate-950/95">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-
-          <Link
-            href="/"
-            className="text-xl font-bold"
-          >
-            PotholeWatch{" "}
-            <span className="text-cyan-400">
-              AI
-            </span>
-          </Link>
-
-          <Link
-            href="/track"
-            className="rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-          >
-            Track Complaint
-          </Link>
-
-          <Link
-            href="/dashboard"
-            className="text-sm font-semibold text-slate-300 transition hover:text-cyan-300"
-          >
-            Dashboard
-          </Link>
-
-        </div>
-      </header>
-
       <section className="mx-auto max-w-5xl px-6 py-10">
 
         {/* HEADING */}
@@ -1210,7 +1212,7 @@ export default function ReportPage() {
 
                 <InfoCard
                   label="AI Verification"
-                  value="VERIFIED"
+                  value={manualReview ? "Needs Review" : "Verified"}
                 />
 
                 <InfoCard
@@ -1297,8 +1299,8 @@ export default function ReportPage() {
 
               <SectionHeading
                 icon="👤"
-                title="Registered Citizen"
-                subtitle="Your login details are automatically attached to this complaint."
+                title="Citizen Details"
+                subtitle="Name is required. Phone and email are optional for follow-up."
               />
 
               <div className="grid gap-5 md:grid-cols-3">
@@ -1308,7 +1310,6 @@ export default function ReportPage() {
                   value={name}
                   onChange={setName}
                   placeholder="Your name"
-                  required
                 />
 
                 <InputField
@@ -1317,7 +1318,6 @@ export default function ReportPage() {
                   onChange={setPhone}
                   placeholder="Phone number"
                   type="tel"
-                  required
                 />
 
                 <InputField
@@ -1326,13 +1326,12 @@ export default function ReportPage() {
                   onChange={setEmail}
                   placeholder="Email address"
                   type="email"
-                  required
                 />
 
               </div>
 
               <p className="mt-4 text-xs text-slate-500">
-                Logged-in citizen details will be associated with the generated Complaint ID.
+                You can submit publicly without creating an account.
               </p>
 
             </section>
@@ -1693,26 +1692,38 @@ export default function ReportPage() {
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-slate-400">
-                After successful AI verification, a unique Complaint ID will be generated and linked to your account.
+                Your complaint can be submitted even when evidence or location needs manual review.
               </p>
 
               <button
                 type="button"
-                onClick={submitComplaint}
-                disabled={
-                  (verificationStatus !== "verified" &&
-                    !manualReview) ||
-                  latitude === null ||
-                  !authority
-                }
+                onClick={() => void submitComplaint()}
+                disabled={false}
                 className="mt-5 w-full rounded-xl bg-cyan-400 px-6 py-4 text-lg font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 🚀 Submit Civic Complaint
               </button>
 
               <p className="mt-3 text-center text-xs text-slate-500">
-                GPS + Gemini verification are required before submission.
+                Gemini, GPS and contact details are optional. Uncertain evidence is saved for manual review.
               </p>
+
+              {duplicateMatch && !submitted && (
+                <div className="mt-5 rounded-xl border border-amber-400/30 bg-amber-400/10 p-5 text-sm text-amber-100">
+                  <p className="font-semibold">Similar complaint already exists.</p>
+                  <p className="mt-2">Existing Complaint ID: {duplicateMatch.id}</p>
+                  <p className="mt-1">Current Status: {duplicateMatch.status}</p>
+                  <p className="mt-1">Location: {duplicateMatch.area}</p>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                    <Link href={`/track?id=${encodeURIComponent(duplicateMatch.id)}`} className="rounded-lg border border-amber-200/40 px-4 py-3 text-center font-semibold hover:bg-amber-200/10">
+                      View Existing Complaint
+                    </Link>
+                    <button type="button" onClick={() => void submitComplaint(true)} className="rounded-lg bg-amber-300 px-4 py-3 font-semibold text-slate-950">
+                      Submit Anyway
+                    </button>
+                  </div>
+                </div>
+              )}
 
             </section>
 

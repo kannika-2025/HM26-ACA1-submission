@@ -297,29 +297,6 @@ export default function TrackPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      {/* Header */}
-      <header className="border-b border-white/10 bg-slate-950/90">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <a href="/" className="text-xl font-bold">
-            PotholeWatch <span className="text-cyan-400">AI</span>
-          </a>
-
-          <a
-            href="/report"
-            className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-          >
-            Report Civic Issue
-          </a>
-
-          <a
-            href="/dashboard"
-            className="text-sm font-semibold text-slate-300 hover:text-cyan-300"
-          >
-            Dashboard
-          </a>
-        </div>
-      </header>
-
       <section className="mx-auto max-w-5xl px-6 py-12">
         {/* Title */}
         <div className="mb-10 text-center">

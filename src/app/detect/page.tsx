@@ -6,6 +6,9 @@ import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 type Detection = {
   issue: string;
+  issueType?: string;
+  verificationStatus?: string;
+  evidenceQuality?: string;
   confidence: number;
   reason: string;
   evidenceStatus: string;
@@ -515,18 +518,6 @@ export default function DetectPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-white/10 bg-slate-950/95">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <Link href="/" className="text-xl font-bold">
-            PotholeWatch <span className="text-cyan-400">AI</span>
-          </Link>
-          <nav className="flex items-center gap-4 text-sm font-semibold">
-            <Link href="/track" className="text-slate-300 hover:text-cyan-300">Track Complaint</Link>
-            <Link href="/dashboard" className="text-slate-300 hover:text-cyan-300">Dashboard</Link>
-          </nav>
-        </div>
-      </header>
-
       <section className="mx-auto max-w-4xl px-6 py-12">
         <p className="text-sm font-semibold uppercase tracking-widest text-cyan-400">AI Civic Scan</p>
         <h1 className="mt-3 text-4xl font-bold sm:text-5xl">Check an image for civic issues</h1>
@@ -607,6 +598,8 @@ export default function DetectPage() {
                 value={detection.manualReview ? "Needs manual review" : detection.issue === "Unknown" ? "No clear civic issue" : detection.issue}
               />
               <Result label="Confidence" value={`${detection.confidence}%`} />
+              <Result label="Evidence status" value={detection.verificationStatus || (detection.manualReview ? "Needs Review" : detection.evidenceStatus === "VERIFIED" ? "Verified" : "Needs Review")} />
+              <Result label="Evidence quality" value={detection.evidenceQuality || "Review required"} />
               <Result label="Recommended department" value={department} />
               <Result label="Recommended authority" value={routeAuthority(latitude, longitude)} />
             </div>
