@@ -138,20 +138,21 @@ export default function DashboardPage() {
     },
     {}
   );
+const neglectedComplaints = complaints.filter((complaint) => {
+  if (
+    complaint.current_status?.trim().toLowerCase() === "fixed" ||
+    !complaint.last_updated
+  ) {
+    return false;
+  }
 
-  const neglectCount = complaints.filter((complaint) => {
-    if (
-      complaint.current_status?.trim().toLowerCase() === "fixed" ||
-      !complaint.last_updated
-    ) {
-      return false;
-    }
+  return (
+    Date.now() - new Date(complaint.last_updated).getTime() >=
+    2 * 24 * 60 * 60 * 1000
+  );
+});
 
-    return (
-      Date.now() - new Date(complaint.last_updated).getTime() >=
-      2 * 24 * 60 * 60 * 1000
-    );
-  }).length;
+const neglectCount = neglectedComplaints.length;
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -258,6 +259,50 @@ export default function DashboardPage() {
               <StatCard label="Neglect / inactive" value={neglectCount} />
               <StatCard label="Active complaints" value={complaints.filter((complaint) => complaint.current_status !== "Fixed").length} />
             </div>
+            {neglectedComplaints.length > 0 && (
+  <div className="mt-8 rounded-2xl border border-red-400/30 bg-red-400/10 p-6">
+    <h2 className="text-xl font-bold text-red-300">
+      🚨 Neglect / Inactivity Warning
+    </h2>
+
+    <p className="mt-2 text-sm text-red-100/70">
+      The following complaints have had no update for more than 2 days.
+    </p>
+
+    <div className="mt-5 space-y-4">
+      {neglectedComplaints.map((complaint) => (
+        <div
+          key={complaint.id}
+          className="rounded-xl border border-red-400/20 bg-slate-950/50 p-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-white">
+                Complaint ID: {complaint.id || "Unknown"}
+              </p>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Issue: {complaint.issue || "Unknown"}
+              </p>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Authority: {complaint.assigned_authority || "Not assigned"}
+              </p>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Status: {complaint.current_status || "Unknown"}
+              </p>
+            </div>
+
+            <span className="rounded-full bg-red-400/20 px-3 py-1 text-xs font-semibold text-red-300">
+              ⚠️ INACTIVE
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
             <div className="mt-8 grid gap-6 lg:grid-cols-2">
               <CountList title="Complaints by department" counts={departmentCounts} />
